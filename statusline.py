@@ -4,7 +4,11 @@
 Reads the status-line JSON payload on stdin and prints ONE line (no trailing
 newline segments, no vertical growth). Layout:
 
-    <model>  ·  ctx N%  ·  5h N%  ·  wk N%  ·  <repo>
+    <host>  ·  <model>  ·  ctx N%  ·  5h N%  ·  wk N%  ·  <repo>
+
+The leading <host> segment is this machine's hostname (e.g. ethan-debian vs
+home-server), so the bar always names which box the session is on. This one file
+is deployed verbatim to both boxes, so the name is resolved at runtime.
 
 Percentages are color-coded green/yellow/red by fullness. The 5h/wk rate-limit
 segments are account-wide (across all sessions) and are simply omitted when the
@@ -24,6 +28,7 @@ import io
 import json
 import os
 import re
+import socket
 import sys
 
 # Force UTF-8 stdout so the middot separator never trips a narrow locale.
@@ -40,6 +45,7 @@ _ANSI = {
     "yellow": "\x1b[33m",
     "red": "\x1b[31m",
     "cyan": "\x1b[36m",
+    "magenta": "\x1b[35m",
 }
 
 # Percentage color thresholds (<=green stays green, <=yellow is yellow, else red).
@@ -72,6 +78,14 @@ def _num(v):
         return float(v)
     except (TypeError, ValueError):
         return None
+
+
+def _host():
+    """This machine's hostname (e.g. ethan-debian, home-server), or ''."""
+    try:
+        return socket.gethostname().split(".", 1)[0]
+    except OSError:
+        return ""
 
 
 def _model(data):
@@ -158,6 +172,10 @@ def _active_repo(data):
 def render(data):
     parts = []
 
+    host = _host()
+    if host:
+        parts.append(_c(host, "bold", "magenta"))
+
     model = _model(data)
     if model:
         parts.append(model)
@@ -218,6 +236,10 @@ def selftest():
             continue
         if want_repo not in out:
             print(f"FAIL: {label}: expected repo '{want_repo}' in output", file=sys.stderr)
+            ok = False
+        host = _host()
+        if host and host not in out:
+            print(f"FAIL: {label}: expected host '{host}' in output", file=sys.stderr)
             ok = False
         print(f"--- {label} ---")
         print(out)
