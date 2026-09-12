@@ -1,0 +1,6 @@
+- [Edit config in the owning repo](edit-in-repo.md) — shared config -> dev-env, box-local -> this machine repo; never edit live ~/.claude; deploy via install.sh
+- [No auto-memory without consent](no-auto-memory-without-consent.md) — never auto-write memories; propose to Ethan; only write when he asks
+- [No email in repos](no-email-in-repos.md) — never commit email addresses (GitHub noreply excepted); document only their location
+- [GitHub auth as dev](github-auth-as-dev.md) — gh is persistently authed as dev; call gh directly, no GH_TOKEN
+- [No emojis in files](no-emojis-in-files.md) — never use emojis/emoticons in written files; chat only
+- [Repos location](repos-location.md) — new git repos/projects go under /srv/dev/repos (root isn't writable by dev)

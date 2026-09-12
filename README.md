@@ -1,0 +1,69 @@
+# dev-env
+
+The **shared dev-environment layer** for Ethan's boxes. It holds the portable
+"dev ergonomics" that should be identical everywhere Claude Code runs as `dev` —
+and nothing box-specific. Each machine repo consumes it as a sibling clone and
+installs it with one step.
+
+## The three-bucket model (location = classification)
+
+Every shareable item (skill, memory, shell fragment, bin) belongs to exactly one
+bucket, and **the repo it lives in *is* its bucket** — no tags, no manifest, can't
+drift:
+
+| Bucket | Lives in | Installs to |
+| --- | --- | --- |
+| **shared** | **this repo (`dev-env`)** | every box |
+| home-pc only | `my-system` | the workstation |
+| home-server only | `home-server` | the server |
+
+The machine repos keep owning and installing all their box-local content exactly as
+before; `dev-env` owns only the shared slice.
+
+## What's shared here
+
+- `skills/` — `pr`, `merged`, `brainstorm`.
+- `bashrc.d/10-claude.sh` — the `cc` launcher + the mouse-release export.
+- `statusline.py` — the Claude status line (wired into `settings.json`).
+- `memory/` — universal memory notes + `MEMORY.shared.md` (the index fragment merged
+  into each box's `MEMORY.md`). Git identity (`Surxe-dev`) is set by the engine.
+
+## Install
+
+```
+./install.sh [--host workstation|home-server]
+```
+
+`--host` autodetects from `hostname` when omitted. The script **re-execs itself as
+`dev`** (via `sudo -u dev` / `runuser`) when run by ethan or root, then deploys into
+`~dev/.claude`, `~dev/.bashrc.d`, and `~dev/.gitconfig`. Copy-based, additive,
+idempotent. Each machine repo calls it as one step of its own `install.sh`.
+
+## Per-box config & the `.local` override pattern
+
+`hosts/<name>.env` is the box's profile, sourced by the installer:
+
+- `PROJECT` — the Claude project dev's memories live under (`srv-dev` / `home-dev`).
+- `EXCLUDE` — space-separated shared items this box opts out of (default: include all).
+- **Override vars** — values for *parameterized* shared items.
+
+When a shared item would differ between boxes **only** in box-specific values
+(paths, project name), it is **not forked** — it stays a single canonical file with
+`{{VAR}}` placeholders, and each box fills them from its `hosts/<name>.env`. The
+engine renders placeholders before copying and **fails loudly on any unresolved
+`{{VAR}}`**, so a half-rendered file is never deployed. Example: the single
+`memory/edit-in-repo.md` renders to the my-system paths on the workstation and the
+`home-dev` paths on the server — replacing what used to be two near-duplicate notes.
+
+## Engine
+
+`lib/deploy-claude.sh` is the reusable, sourced engine (`render_tree`, `deploy_skills`,
+`deploy_memory`, `deploy_bashrc`, `deploy_gitconfig`, `deploy_statusline`). It
+generalizes the five dev-tier installers that lived in `my-system/users/installers/`.
+Set `DEVENV_HOME_OVERRIDE` to redirect all writes to a throwaway tree for testing.
+
+## Prerequisites on a consuming box
+
+`pr`/`merged` depend on cross-repo tools that must be present for the skills to work:
+`gh` authenticated as `dev`, a `dev` git identity (this engine sets it), and the
+`todo` CLI on `PATH`.
