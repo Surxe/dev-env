@@ -18,6 +18,6 @@ itself was added at his explicit request.
 
 **Where to edit:** once consent is given, the *where-to-write* rule is its own memory:
 [[edit-in-repo]] — edit the owning repo's copy (shared in `dev-env`, box-local in this
-machine's repo) and deploy via `install.sh`, never the live `~/.claude` copies.
+machine's repo) and deploy via `install.sh`, never the live `~/.agents` copies.
 Consent (this memory) and location (that one) are separate gates; clearing one does not
 clear the other.

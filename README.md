@@ -22,11 +22,16 @@ before; `dev-env` owns only the shared slice.
 
 ## What's shared here
 
-- `skills/` — `pr`, `merged`, `brainstorm`.
-- `bashrc.d/10-claude.sh` — the `cc` launcher + the mouse-release export.
+- `skills/` — `pr`, `merged`, `brainstorm`. Installed to `~/.agents/skills`, which
+  both Claude Code (via a `~/.claude/skills` symlink) and the DeepSeek Harness
+  (native `user-agents` root) read.
+- `bashrc.d/10-agents.sh` — the `cc` launcher (Claude) + the `ds` launcher
+  (DeepSeek Harness) + the mouse-release export.
 - `statusline.py` — the Claude status line (wired into `settings.json`).
 - `memory/` — universal memory notes + `MEMORY.shared.md` (the index fragment merged
-  into each box's `MEMORY.md`). Git identity (`Surxe-dev`) is set by the engine.
+  into each box's `MEMORY.md`). The same notes are also rendered into the
+  `memory-standard` (mm) layout for the DeepSeek Harness at `~/.dsh/memory`.
+  Git identity (`Surxe-dev`) is set by the engine.
 
 ## Install
 
@@ -36,7 +41,9 @@ before; `dev-env` owns only the shared slice.
 
 `--host` autodetects from `hostname` when omitted. The script **re-execs itself as
 `dev`** (via `sudo -u dev` / `runuser`) when run by ethan or root, then deploys into
-`~dev/.claude`, `~dev/.bashrc.d`, and `~dev/.gitconfig`. Copy-based, additive,
+`~dev/.agents` (the neutral agent root) and symlinks the Claude-specific paths into
+`~dev/.claude`, plus `~dev/.bashrc.d`, `~dev/.gitconfig`, and the DeepSeek Harness
+memory (`~dev/.dsh/memory` + the `memory-standard` plugin). Copy-based, additive,
 idempotent. Each machine repo calls it as one step of its own `install.sh`.
 
 ## Per-box config & the `.local` override pattern
@@ -58,9 +65,13 @@ engine renders placeholders before copying and **fails loudly on any unresolved
 ## Engine
 
 `lib/deploy-claude.sh` is the reusable, sourced engine (`render_tree`, `deploy_skills`,
-`deploy_memory`, `deploy_bashrc`, `deploy_gitconfig`, `deploy_statusline`). It
-generalizes the five dev-tier installers that lived in `my-system/users/installers/`.
-Set `DEVENV_HOME_OVERRIDE` to redirect all writes to a throwaway tree for testing.
+`deploy_memory`, `deploy_dsh_memory`, `deploy_dsh`, `deploy_bashrc`,
+`deploy_gitconfig`, `deploy_statusline`, plus the `_ensure_symlink` helper that
+wires `~/.claude` onto the neutral `~/.agents` root). It generalizes the dev-tier
+installers that lived in `my-system/users/installers/`. `lib/memory-standard.py`
+renders Claude-format memory notes into the `memory-standard` (mm) layout the
+DeepSeek Harness plugin reads. Set `DEVENV_HOME_OVERRIDE` to redirect all writes to
+a throwaway tree for testing.
 
 ## Prerequisites on a consuming box
 
