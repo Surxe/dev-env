@@ -1,29 +1,35 @@
 ---
 name: edit-in-repo
-description: Writing/editing ANY Claude memory or skill -> edit the owning repo's copy (shared items in dev-env, box-local items in this box's machine repo), never the live ~/.claude copy; deploy via install.sh
+description: Writing/editing ANY agent memory or skill -> edit the owning repo's copy (shared items in dev-env, box-local items in this box's machine repo), never the live ~/.agents copy; deploy via install.sh
 metadata:
   type: feedback
 ---
 
-Claude config (memory notes, `MEMORY.md`, skills, the `cc` launcher, statusline) is
-**source-controlled, not authored in the live store**. It lives in one of two layers,
-and you edit it in the layer that owns it:
+Agent config (memory notes, `MEMORY.md`, skills, the `cc`/`ds` launchers, statusline)
+is **source-controlled, not authored in the live store**. It lives in one of two
+layers, and you edit it in the layer that owns it:
 
 - **Shared across boxes** -> `dev-env` (`/srv/dev/repos/dev-env/`): `skills/`,
   `memory/`, `bashrc.d/`, `statusline.py`. Deployed to every box by
   `dev-env/install.sh`. This note itself is a shared memory — you are reading it from
   the live dir only because it was authored in `dev-env` and installed.
 - **Box-local to this machine ({{MACHINE_REPO}})** -> box-local memories live in
-  `{{MEMORY_REPO_DIR}}/` (Claude project `{{PROJECT}}`), deployed by `{{INSTALL_CMD}}`.
+  `{{MEMORY_REPO_DIR}}/` (project `{{PROJECT}}`), deployed by `{{INSTALL_CMD}}`.
 
-Never edit the live `~dev/.claude/...` copies directly: that path is a **deployment
-target**, refreshed (copy-based) on the next install, so a direct edit is overwritten
-and lost from git.
+The **live root is `~dev/.agents/`** (the neutral agent store): skills and the flat
+Claude-format memory live there, Claude Code reads them through symlinks under
+`~dev/.claude`, and the DeepSeek Harness reads skills from `~dev/.agents/skills`
+natively and memory from `~dev/.dsh/memory` (rendered by `dev-env/lib/memory-standard.py`
+for the `memory-standard` plugin).
+
+Never edit the live `~dev/.agents/...` (or the symlinked `~dev/.claude/...`) copies
+directly: those paths are a **deployment target**, refreshed (copy-based) on the next
+install, so a direct edit is overwritten and lost from git.
 
 **Why:** config-as-code — version-controlled, reviewed, rebuildable. A note that
-exists only in `~/.claude` is invisible to git and dies on rebuild/reinstall. The repo
-copy also carries the verification/consent boundary; writing straight to live bypasses
-it. Same principle as [[no-symlink-repo-to-home]].
+exists only in the live store is invisible to git and dies on rebuild/reinstall. The
+repo copy also carries the verification/consent boundary; writing straight to live
+bypasses it. Same principle as [[no-symlink-repo-to-home]].
 
 **How to apply:** the moment you are about to create or edit ANY memory or skill —
 including in response to an explicit "add a memory" request — decide the layer first

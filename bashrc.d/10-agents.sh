@@ -1,4 +1,4 @@
-# --- Claude Code shortcuts (dev user).
+# --- Coding-agent shortcuts (dev user).
 # `cc` launches Claude Code with permission prompts bypassed. To start a fresh
 # session, exit (Ctrl+D twice, or /exit) and run `cc` again — a new process gets
 # a genuinely fresh identity, which `/clear` doesn't (it keeps a --name/rename
@@ -9,6 +9,14 @@
 # a function loads in interactive dev shells the same way an alias would.
 cc() {
     claude --dangerously-skip-permissions "$@"
+}
+
+# `ds` launches the DeepSeek Harness (dsh) on the default profile. Override the
+# profile per-shell with DSH_PROFILE (e.g. DSH_PROFILE=headless ds "run tests").
+# Its permission default is danger-full-access via ~/.dsh/settings.yaml, so no
+# skip-permissions flag is needed.
+ds() {
+    dsh --profile "${DSH_PROFILE:-dsh-tui}" "$@"
 }
 
 # Fully release Claude Code's TUI mouse capture. Its mouse tracking (v2.1.195+)

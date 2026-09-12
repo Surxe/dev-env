@@ -8,6 +8,14 @@
 # functions below. Because install.sh is already running as dev by the time these
 # run, every function writes dev's own files directly — no sudo/runuser here.
 #
+# Provider-neutral layout: this engine installs the SHARED slice (skills, memory,
+# statusline) into `~/.agents/`, the neutral root; each machine repo installs its
+# box-local skills/memory and its global AGENTS.md into the same root. Claude Code
+# consumes it through symlinks into `~/.claude` (skills/, CLAUDE.md,
+# projects/-<project>/memory, statusline.py); the DeepSeek Harness consumes skills
+# directly from `~/.agents/skills` and memory through the `memory-standard` plugin
+# rooted at `~/.dsh/memory` (see deploy_dsh / deploy_dsh_memory).
+#
 # A sourced library must not mutate the caller's shell options, so this file does
 # NOT `set -euo pipefail` (install.sh sets that for the whole run).
 
@@ -18,6 +26,11 @@ _DEVENV_DEPLOY_SOURCED=1
 # tree for testing (the install path never sets it).
 DEV_HOME="${DEVENV_HOME_OVERRIDE:-$(getent passwd dev | cut -d: -f6)}"; : "${DEV_HOME:=/home/dev}"
 CLAUDE_DIR="$DEV_HOME/.claude"
+AGENTS_DIR="$DEV_HOME/.agents"
+# The DeepSeek Harness home is ~/.dsh by default; we derive it from DEV_HOME (not
+# the DSH_HOME env) so DEVENV_HOME_OVERRIDE redirects every write for testing.
+DSH_HOME_DIR="$DEV_HOME/.dsh"
+LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 say(){ printf '  %s\n' "$*"; }
 die(){ printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -28,6 +41,27 @@ _excluded(){   # $1 = item name
     local e
     for e in ${EXCLUDE:-}; do [ "$e" = "$1" ] && return 0; done
     return 1
+}
+
+# --- _ensure_symlink: point a live Claude/DSH path at a neutral ~/.agents target.
+#     Idempotent; replaces a stale symlink, and a pre-existing real file/dir (the
+#     one-time migration from the old copy-into-~/.claude layout) is moved aside to
+#     <path>.pre-agents rather than deleted, so nothing is silently destroyed. ---
+_ensure_symlink(){   # $1 = target (must exist), $2 = link path
+    local target="$1" link="$2"
+    [ -e "$target" ] || [ -L "$target" ] || { say "symlink: target missing: $target"; return 1; }
+    if [ -L "$link" ]; then
+        [ "$(readlink "$link")" = "$target" ] && return 0
+        rm -f "$link"
+    elif [ -e "$link" ]; then
+        local bak="$link.pre-agents"
+        rm -rf "$bak"
+        mv "$link" "$bak"
+        say "symlink: moved existing $link -> $bak"
+    fi
+    mkdir -p "$(dirname "$link")"
+    ln -s "$target" "$link"
+    say "symlink: $link -> $target"
 }
 
 # --- render: substitute {{VAR}} placeholders from the environment (the host's
@@ -65,11 +99,13 @@ render_tree(){   # $1 = src dir, $2 = stage dir — render every file, preserve 
     done < <(find "$src" -type f -print0)
 }
 
-# --- deploy_skills: additive copy of staged skill dirs into ~dev/.claude/skills,
-#     honoring EXCLUDE. Additive like the machine-repo installers: refreshes/adds,
-#     does not prune skills removed from the repo. ---
+# --- deploy_skills: additive copy of staged skill dirs into ~/.agents/skills
+#     (the neutral root), honoring EXCLUDE, then symlink ~/.claude/skills to it.
+#     The DeepSeek Harness scans ~/.agents/skills natively (user-agents root), so
+#     one copy serves both agents. Additive like the machine-repo installers:
+#     refreshes/adds, does not prune skills removed from the repo. ---
 deploy_skills(){   # $1 = staged skills dir
-    local src="$1" dst="$CLAUDE_DIR/skills" d name
+    local src="$1" dst="$AGENTS_DIR/skills" d name
     [ -d "$src" ] || { say "skills: nothing to deploy"; return 0; }
     mkdir -p "$dst"
     for d in "$src"/*/; do
@@ -79,19 +115,22 @@ deploy_skills(){   # $1 = staged skills dir
         cp -a "$d." "$dst/$name/"
         say "skill -> $dst/$name"
     done
+    _ensure_symlink "$dst" "$CLAUDE_DIR/skills"
 }
 
-# --- deploy_memory: copy staged universal memory notes into this box's
-#     project-scoped memory dir (-$PROJECT), honoring EXCLUDE, and merge the shared
-#     index lines into that project's MEMORY.md inside a delimited block (so the
-#     box-local entries are left intact). The only per-box difference is $PROJECT
-#     (srv-dev vs home-dev). MEMORY.shared.md (the index fragment) and MEMORY.md
-#     itself are never deployed as memory notes. ---
+# --- deploy_memory: copy staged universal memory notes into the neutral
+#     ~/.agents/memory dir (flat, Claude Code format), honoring EXCLUDE, and merge
+#     the shared index lines into its MEMORY.md inside a delimited block (so the
+#     box-local entries are left intact). Claude consumes it via a symlinked
+#     project memory dir; the DeepSeek Harness gets the same notes rendered into
+#     the memory-standard layout under ~/.dsh/memory (see deploy_dsh_memory).
+#     The only per-box difference is $PROJECT (srv-dev vs home-dev). MEMORY.shared.md
+#     (the index fragment) and MEMORY.md itself are never deployed as notes. ---
 _MEM_BEGIN="<!-- BEGIN dev-env shared memories (managed by dev-env/install.sh) -->"
 _MEM_END="<!-- END dev-env shared memories -->"
 deploy_memory(){   # $1 = staged memory dir, $2 = project slug
     local src="$1" project="$2"
-    local dst="$CLAUDE_DIR/projects/-$project/memory"
+    local dst="$AGENTS_DIR/memory"
     local f name frag="$src/MEMORY.shared.md" live="$dst/MEMORY.md"
     [ -d "$src" ] || { say "memory: nothing to deploy"; return 0; }
     [ -n "$project" ] || die "deploy_memory: no PROJECT set for this host"
@@ -107,6 +146,8 @@ deploy_memory(){   # $1 = staged memory dir, $2 = project slug
     [ -f "$frag" ] || { say "memory: no MEMORY.shared.md index fragment"; return 0; }
     _merge_memory_index "$frag" "$live"
     say "memory: merged shared index block -> $live"
+    _ensure_symlink "$dst" "$CLAUDE_DIR/projects/-$project/memory"
+    deploy_dsh_memory "$src"
 }
 
 _merge_memory_index(){   # $1 = fragment file, $2 = live MEMORY.md
@@ -135,7 +176,73 @@ with open(live, "w", encoding="utf-8") as f:
 PY
 }
 
-# --- deploy_bashrc: copy staged .bashrc.d fragments into ~dev/.bashrc.d, honoring
+# --- deploy_dsh_memory: render the staged Claude-format notes into the
+#     memory-standard (mm) layout at $DSH_HOME_DIR/memory, which the
+#     `memory-standard` plugin reads as its root. Only the notes this call owns
+#     (the shared slice) are written; box-local notes are rendered by the machine
+#     repo's own installer, and lib/memory-standard.py leaves foreign `## <topic>`
+#     sections untouched, so the two slices coexist in one index. ---
+deploy_dsh_memory(){   # $1 = staged memory dir (Claude-format notes)
+    local src="$1" tmp f name
+    [ -d "$src" ] || return 0
+    command -v python3 >/dev/null || { say "dsh memory: no python3 — skipping"; return 0; }
+    tmp="$(mktemp -d)"
+    for f in "$src"/*.md; do
+        [ -e "$f" ] || continue
+        name="$(basename "$f" .md)"
+        case "$name" in MEMORY|MEMORY.shared) continue;; esac
+        _excluded "$name" && continue
+        cp -a "$f" "$tmp/"
+    done
+    python3 "$LIB_DIR/memory-standard.py" render --src "$tmp" --dst "$DSH_HOME_DIR/memory" || \
+        say "!! dsh memory render failed (see above)"
+    rm -rf "$tmp"
+}
+
+# --- _find_dsh: locate the DeepSeek Harness `dsh` CLI, which is optional wiring.
+#     `sudo -u dev` resets PATH to sudo's secure_path, so we also probe the nvm
+#     node bins and ~/.local/bin rather than trusting `command -v` alone. ---
+_find_dsh(){
+    local c
+    c="$(command -v dsh 2>/dev/null || true)"
+    [ -n "$c" ] && { echo "$c"; return 0; }
+    local nvmbin
+    nvmbin="$(ls -d "$DEV_HOME"/.nvm/versions/node/*/bin/dsh 2>/dev/null | sort -V | tail -1 || true)"
+    [ -n "$nvmbin" ] && [ -x "$nvmbin" ] && { echo "$nvmbin"; return 0; }
+    [ -x "$DEV_HOME/.local/bin/dsh" ] && { echo "$DEV_HOME/.local/bin/dsh"; return 0; }
+    return 1
+}
+
+# --- deploy_dsh: install the `memory-standard` plugin into the DeepSeek Harness
+#     profile so dsh agents get mem_read/mem_write/mem_search/mem_budget/mem_digest.
+#     Best-effort (like dev-mcp): if dsh / git / npm is missing it skips instead of
+#     failing the deploy. The plugin's lib/ is gitignored (TypeScript source only),
+#     so it is vendored + built once, then path-installed into the profile. ---
+deploy_dsh(){
+    local dsh profile vendor
+    dsh="$(_find_dsh || true)"
+    [ -n "$dsh" ] || { say "dsh: 'dsh' not found — skipping memory-standard plugin"; return 0; }
+    profile="${DSH_PROFILE:-dsh-tui}"
+    if "$dsh" --profile "$profile" --dump-config 2>/dev/null | grep -q 'memory-standard'; then
+        say "dsh: memory-standard already wired into '$profile'"
+        return 0
+    fi
+    vendor="${DSH_PLUGIN_VENDOR:-$DEV_HOME/.local/share/dsh/plugins}/memory-standard"
+    if [ ! -f "$vendor/lib/index.js" ]; then
+        command -v git >/dev/null || { say "dsh: git not found — skipping memory-standard plugin"; return 0; }
+        command -v npm >/dev/null || { say "dsh: npm not found — skipping memory-standard plugin"; return 0; }
+        mkdir -p "$(dirname "$vendor")"
+        git clone --depth 1 https://github.com/JohnXu22786/memory-standard.git "$vendor" || \
+            { say "dsh: clone of memory-standard failed — skipping"; return 0; }
+        ( cd "$vendor" && npm install --ignore-scripts && npm run build ) || \
+            { say "dsh: build of memory-standard failed — skipping"; return 0; }
+    fi
+    "$dsh" plugin --profile "$profile" add "$vendor" || \
+        { say "dsh: 'plugin add' failed — see output above"; return 0; }
+    say "dsh: memory-standard plugin wired into '$profile'"
+}
+
+# --- deploy_bashrc: copy staged .bashrc.d fragments into ~/.bashrc.d, honoring
 #     EXCLUDE, and ensure ~/.bashrc actually sources ~/.bashrc.d/*.sh (the server's
 #     dev may lack the loader bootstrap my-system assumes). ---
 deploy_bashrc(){   # $1 = staged bashrc.d dir
@@ -177,14 +284,16 @@ deploy_gitconfig(){
     say "git identity -> $DEV_GIT_NAME <$DEV_GIT_EMAIL>"
 }
 
-# --- deploy_statusline: copy statusline.py + idempotently wire settings.json's
-#     statusLine key without disturbing other keys. Lifted from dev-statusline.sh;
-#     warns (not fails) if the self-test does not pass. ---
+# --- deploy_statusline: copy statusline.py into ~/.agents, symlink it into
+#     ~/.claude, and idempotently wire settings.json's statusLine key without
+#     disturbing other keys. Lifted from dev-statusline.sh; warns (not fails) if
+#     the self-test does not pass. ---
 deploy_statusline(){   # $1 = staged statusline.py
-    local src="$1" dst="$CLAUDE_DIR/statusline.py" settings="$CLAUDE_DIR/settings.json"
+    local src="$1" dst="$AGENTS_DIR/statusline.py" settings="$CLAUDE_DIR/settings.json"
     [ -e "$src" ] || { say "statusline: no source — skipping"; return 0; }
     install -D -m 0644 "$src" "$dst"
     say "statusline -> $dst"
+    _ensure_symlink "$dst" "$CLAUDE_DIR/statusline.py"
     python3 - "$settings" <<'PY'
 import json, os, sys
 path = sys.argv[1]

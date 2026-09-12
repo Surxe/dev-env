@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 #
-# install.sh — deploy the shared dev-env layer (portable skills, the cc launcher,
-# dev's git identity, the statusline, and universal memories) into dev's live
-# Claude area on THIS box. The shared slice lives here once; each box gets it by
-# running this script, configured by its hosts/<name>.env profile.
+# install.sh — deploy the shared dev-env layer (portable skills, the cc/ds
+# launchers, dev's git identity, the statusline, and universal memories) into
+# dev's neutral `~/.agents` area on THIS box, then symlink the Claude-specific
+# paths into `~/.claude`. The DeepSeek Harness reads skills from ~/.agents/skills
+# natively and memory through the `memory-standard` plugin (deploy_dsh). The
+# shared slice lives here once; each box gets it by running this script,
+# configured by its hosts/<name>.env profile.
 #
 # Usage:  install.sh [--host <name>]
 #   --host   workstation | home-server (default: autodetected from `hostname`)
@@ -53,7 +56,7 @@ if [ "$ME" != dev ] && [ "$ALREADY_DEV" -ne 1 ]; then
 fi
 [ "$(id -un)" = dev ] || { echo "ERROR: must run as dev (got $(id -un))" >&2; exit 1; }
 
-echo "== dev-env install (host=$HOST) -> $(getent passwd dev | cut -d: -f6)/.claude =="
+echo "== dev-env install (host=$HOST) -> $(getent passwd dev | cut -d: -f6)/.agents =="
 
 # --- load the host profile (exported so render sees the override vars) ---
 set -a
@@ -78,5 +81,6 @@ deploy_memory     "$STAGE/memory" "$PROJECT"
 deploy_bashrc     "$STAGE/bashrc.d"
 deploy_gitconfig
 deploy_statusline "$STAGE/statusline.py"
+deploy_dsh
 
 echo "dev-env layer installed."
