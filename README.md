@@ -26,7 +26,8 @@ before; `dev-env` owns only the shared slice.
   both Claude Code (via a `~/.claude/skills` symlink) and the DeepSeek Harness
   (native `user-agents` root) read.
 - `bashrc.d/10-agents.sh` — the `cc` launcher (Claude) + the `ds` launcher
-  (DeepSeek Harness, injecting `DEEPSEEK_API_KEY` from `~/.config/deepseek/env`) + the mouse-release export.
+  (DeepSeek Harness), exporting `DEEPSEEK_API_KEY` from `~/.config/deepseek/env`
+  into every interactive dev shell at startup, + the mouse-release export.
 - `statusline.py` — the Claude status line (wired into `settings.json`).
 - `memory/` — universal memory notes + `MEMORY.shared.md` (the index fragment merged
   into each box's `MEMORY.md`). The same notes are also rendered into the
@@ -37,7 +38,8 @@ before; `dev-env` owns only the shared slice.
 
 `DEEPSEEK_API_KEY` is **not** stored in this repo. It lives in
 `~dev/.config/deepseek/env` (single line `DEEPSEEK_API_KEY=...`, mode 0600,
-dev-owned) on each box, and `ds()` injects it into the environment at launch.
+dev-owned) on each box, and `bashrc.d/10-agents.sh` exports it into every
+interactive dev shell at startup (`ds()` re-sources it as a fallback at launch).
 To set it on a box:
 
 ```
