@@ -247,6 +247,49 @@ deploy_dsh(){
     say "dsh: memory-standard plugin wired into '$profile'"
 }
 
+# --- deploy_dsh_statusbar: install the dsh-tui status bar (host · model · ctx% ·
+#     repo) into the DeepSeek Harness profile. Copies statusbar.mjs into the
+#     profile dir and mounts it via the profile's own cordis.patch.yml (the
+#     user-owned patch surface, applied after every bundle layer). Best-effort:
+#     skips (warns, never fails) if the profile dir is absent. Idempotent — and
+#     it will NOT clobber a cordis.patch.yml the user has hand-edited. ---
+deploy_dsh_statusbar(){   # $1 = staged dsh dir (statusbar.mjs + cordis.patch.yml)
+    local src="$1" profile profdir dest stripped
+    [ -d "$src" ] || { say "dsh statusbar: no source — skipping"; return 0; }
+    [ -f "$src/statusbar.mjs" ] || { say "dsh statusbar: no statusbar.mjs — skipping"; return 0; }
+    profile="${DSH_PROFILE:-dsh-tui}"
+    profdir="$DSH_HOME_DIR/profiles/$profile"
+    if [ ! -d "$profdir" ]; then
+        say "dsh statusbar: profile '$profile' not installed ($profdir) — skipping"
+        return 0
+    fi
+
+    # The plugin file itself is always refreshed (it is dev-env-owned).
+    install -D -m 0644 "$src/statusbar.mjs" "$profdir/statusbar.mjs"
+    say "dsh statusbar -> $profdir/statusbar.mjs"
+
+    # Wire the mount into the profile's cordis.patch.yml (the user surface).
+    dest="$profdir/cordis.patch.yml"
+    if [ -f "$dest" ] && grep -q 'dev-status-bar' "$dest"; then
+        say "dsh statusbar: already wired in $dest"
+        return 0
+    fi
+    # Stock/empty check: strip comment + blank lines and whitespace; the stock
+    # file is exactly `[]` (or empty). Anything else is a user-authored patch.
+    if [ -f "$dest" ]; then
+        stripped="$(grep -vE '^[[:space:]]*(#|$)' "$dest" | tr -d '[:space:]')"
+    else
+        stripped=""
+    fi
+    if [ -z "$stripped" ] || [ "$stripped" = "[]" ]; then
+        install -D -m 0644 "$src/cordis.patch.yml" "$dest"
+        say "dsh statusbar: wired mount -> $dest"
+    else
+        say "!! dsh statusbar: $dest has custom entries — not modifying."
+        say "   Add the dev-status-bar row from $src/cordis.patch.yml manually."
+    fi
+}
+
 # --- deploy_bashrc: copy staged .bashrc.d fragments into ~/.bashrc.d, honoring
 #     EXCLUDE, and ensure ~/.bashrc actually sources ~/.bashrc.d/*.sh (the server's
 #     dev may lack the loader bootstrap my-system assumes). ---
