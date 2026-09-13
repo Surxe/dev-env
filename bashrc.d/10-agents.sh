@@ -11,13 +11,22 @@ cc() {
     claude --dangerously-skip-permissions "$@"
 }
 
+# Export the DeepSeek API key into the shell environment at startup, so `dsh`,
+# `dsh-tui`, and any tool that reads DEEPSEEK_API_KEY from the environment work
+# without a wrapper. The key lives in ~/.config/deepseek/env (mode 0600,
+# dev-owned) and is never committed to this repo (see README).
+if [ -f "$HOME/.config/deepseek/env" ]; then
+    set -a
+    # shellcheck disable=SC1091
+    . "$HOME/.config/deepseek/env"
+    set +a
+fi
+
 # `ds` launches the DeepSeek Harness (dsh) on the default profile. Override the
 # profile per-shell with DSH_PROFILE (e.g. DSH_PROFILE=headless ds "run tests").
 # Its permission default is danger-full-access via ~/.dsh/settings.yaml, so no
-# skip-permissions flag is needed.
-#
-# DEEPSEEK_API_KEY is injected from ~/.config/deepseek/env (mode 0600, dev-owned);
-# the key lives there and is never committed to this repo (see README).
+# skip-permissions flag is needed. The key is already exported above; ds()
+# re-sources the env file as a fallback for shells started before it existed.
 ds() {
     if [ -f "$HOME/.config/deepseek/env" ]; then
         set -a
