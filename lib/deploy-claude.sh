@@ -371,3 +371,38 @@ PY
         say "!! statusline: self-test FAILED — check $dst"
     fi
 }
+
+# --- deploy_sessionstart_hostname: wire a SessionStart hook into settings.json
+#     (merge-only, idempotent) that injects the live hostname into context at the
+#     start of every session, so the model detects the active box directly instead
+#     of inferring it. Shared -> runs on both boxes; each resolves its own hostname
+#     at session start. The active-box memory maps the hostname to the box name. ---
+deploy_sessionstart_hostname(){
+    local settings="$CLAUDE_DIR/settings.json"
+    python3 - "$settings" <<'PY'
+import json, os, sys
+path = sys.argv[1]
+try:
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        data = {}
+except (OSError, ValueError):
+    data = {}
+cmd = ('printf \'{"hookSpecificOutput":{"hookEventName":"SessionStart",'
+       '"additionalContext":"Active hostname: %s"}}\\n\' "$(hostname)"')
+ss = data.setdefault("hooks", {}).setdefault("SessionStart", [])
+present = any(
+    isinstance(g, dict) and any(
+        isinstance(h, dict) and h.get("command") == cmd for h in g.get("hooks", [])
+    )
+    for g in ss
+)
+if not present:
+    ss.append({"hooks": [{"type": "command", "command": cmd}]})
+os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+with open(path, "w", encoding="utf-8") as f:
+    f.write(json.dumps(data, indent=2) + "\n")
+PY
+    say "sessionstart: wired hostname hook -> $settings"
+}

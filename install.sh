@@ -82,6 +82,7 @@ deploy_memory        "$STAGE/memory" "$PROJECT"
 deploy_bashrc        "$STAGE/bashrc.d"
 deploy_gitconfig
 deploy_statusline    "$STAGE/statusline.py"
+deploy_sessionstart_hostname
 deploy_dsh
 deploy_dsh_statusbar "$STAGE/dsh"
 
