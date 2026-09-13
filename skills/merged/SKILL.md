@@ -3,9 +3,10 @@ name: merged
 description: >-
   Post-merge cleanup after a /pr is merged on GitHub. Run once Ethan has merged
   the PR: closes the initiating todo, switches the local checkout back to the
-  default branch, fetches and pulls, and deletes the now-merged local feature
-  branch. Merge-gated and idempotent. Use whenever the user runs /merged or asks
-  to clean up after a PR merged.
+  default branch, fetches and pulls, deletes the now-merged local feature
+  branch, and syncs a merged box repo to the other box (pull over SSH; run
+  install.sh on the server only). Merge-gated and idempotent. Use whenever the
+  user runs /merged or asks to clean up after a PR merged.
 model: haiku
 ---
 
@@ -20,8 +21,29 @@ known from conversation — no persisted linkage.
 GitHub confirms its PR is merged.
 
 This skill is pinned to `haiku` via frontmatter: after the merge gate it is pure
-deterministic git plumbing with no judgment, so it does not warrant a large
-model. Keep it that way — if you add real decision-making here, revisit the pin.
+deterministic plumbing — git cleanup plus the cross-box sync, both script-driven
+with no judgment — so it does not warrant a large model. Keep it that way — if
+you add real decision-making here, revisit the pin.
+
+## Cross-box sync
+
+Three repos under `/srv/dev/repos` are "box repos" that get deployed to one or
+both boxes:
+
+| repo | deploys to |
+| --- | --- |
+| `dev-env` | both boxes (shared layer) |
+| `my-system` | workstation (`ethan-debian`) |
+| `home-server` | server (`home-server`) |
+
+When the merged repo is a box repo that also deploys to a box *other* than the
+one `/merged` is running on, the change must land there too: `sync-box.sh` (a
+sibling of this file, deployed alongside it) SSHes to the other box, pulls that
+repo's clone under `/srv/dev/repos`, and — **on the server only** — runs its
+`install.sh`. On `ethan-debian` the `install.sh` is never auto-run; it is left to
+Ethan and only reported. Non-box repos are skipped silently. The policy (repo →
+boxes → ssh host → install command) lives entirely in the script, so no judgment
+is needed here — just run it and read its `RESULT:`/`STOP:` line.
 
 ## Auth — same as `/pr`
 
@@ -102,8 +124,24 @@ echo "RESULT: merged '$current' cleaned; now on $default, up to date"
 If the script prints a `STOP:` line (PR not merged, or no PR found for the
 branch), **halt and tell Ethan** — do not delete anything or improvise.
 
-## Step 3 — Report
+## Step 3 — Sync the other box (one turn)
 
-Briefly state what happened, reading it off the script's `RESULT:`/`STOP:` line:
+After Step 2's script prints a `RESULT:` line (i.e. not `STOP:`), run the sync
+helper once, passing the repo directory that was just cleaned:
+
+```bash
+~/.agents/skills/merged/sync-box.sh /srv/dev/repos/<repo>
+```
+
+It derives the current box from `hostname`, skips any repo that is not a box
+repo or that deploys only to this box, and otherwise pulls — and on the server
+also runs `install.sh` — on each other box. Read off its `RESULT:`/`STOP:` line.
+On `STOP:`, tell Ethan — the remote box was not fully synced; do not retry
+silently or improvise.
+
+## Step 4 — Report
+
+Briefly state what happened, reading off the scripts' `RESULT:`/`STOP:` lines:
 todo closed (with id) if any, now on the default branch, feature branch deleted,
-tree up to date. No emojis.
+tree up to date, and any cross-box sync done or skipped. If a `STOP:` appeared
+at any step, report it and halt. No emojis.
