@@ -222,6 +222,11 @@ deploy_dsh(){
     local dsh profile vendor
     dsh="$(_find_dsh || true)"
     [ -n "$dsh" ] || { say "dsh: 'dsh' not found — skipping memory-standard plugin"; return 0; }
+    # dsh is a node CLI (`#!/usr/bin/env node`). install.sh runs via `sudo -u dev`,
+    # whose secure_path drops the nvm bin dir, so `env node` (and `command -v npm`
+    # below) fail even though _find_dsh located dsh there. Put dsh's own bin dir on
+    # PATH first so every dsh/npm call resolves node.
+    export PATH="$(dirname "$dsh"):$PATH"
     profile="${DSH_PROFILE:-dsh-tui}"
     if "$dsh" --profile "$profile" --dump-config 2>/dev/null | grep -q 'memory-standard'; then
         say "dsh: memory-standard already wired into '$profile'"
@@ -269,6 +274,13 @@ if [ -d "$HOME/.bashrc.d" ]; then
 fi
 LOADER
         say "bashrc: added ~/.bashrc.d loader to $bashrc"
+    fi
+    # Harden the Debian non-interactive guard: `return` at top level only works when
+    # ~/.bashrc is sourced, so if the file is ever executed (e.g. `bash ~/.bashrc`)
+    # it errors on that line. Rewrite it to the sourced-or-exit form, idempotently.
+    if [ -f "$bashrc" ] && grep -q '^[[:space:]]*\*) return;;' "$bashrc"; then
+        sed -i 's#^\([[:space:]]*\)\*) return;;#\1*) return 2>/dev/null || exit 0;;#' "$bashrc"
+        say "bashrc: hardened non-interactive guard in $bashrc"
     fi
 }
 
