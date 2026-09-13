@@ -26,12 +26,28 @@ before; `dev-env` owns only the shared slice.
   both Claude Code (via a `~/.claude/skills` symlink) and the DeepSeek Harness
   (native `user-agents` root) read.
 - `bashrc.d/10-agents.sh` — the `cc` launcher (Claude) + the `ds` launcher
-  (DeepSeek Harness) + the mouse-release export.
+  (DeepSeek Harness, injecting `DEEPSEEK_API_KEY` from `~/.config/deepseek/env`) + the mouse-release export.
 - `statusline.py` — the Claude status line (wired into `settings.json`).
 - `memory/` — universal memory notes + `MEMORY.shared.md` (the index fragment merged
   into each box's `MEMORY.md`). The same notes are also rendered into the
   `memory-standard` (mm) layout for the DeepSeek Harness at `~/.dsh/memory`.
   Git identity (`Surxe-dev`) is set by the engine.
+
+## DeepSeek API key
+
+`DEEPSEEK_API_KEY` is **not** stored in this repo. It lives in
+`~dev/.config/deepseek/env` (single line `DEEPSEEK_API_KEY=...`, mode 0600,
+dev-owned) on each box, and `ds()` injects it into the environment at launch.
+To set it on a box:
+
+```
+install -d -m 700 ~/.config/deepseek
+printf 'DEEPSEEK_API_KEY=sk-...\n' > ~/.config/deepseek/env
+chmod 600 ~/.config/deepseek/env
+```
+
+On a headless box running dsh under systemd, use `EnvironmentFile=` pointing at
+that file instead of a launcher (see the `home-server` repo's `docs/`).
 
 ## Install
 
