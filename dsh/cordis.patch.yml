@@ -1,0 +1,20 @@
+# dev-env managed: dsh-tui status bar.
+#
+# This is the canonical profile patch layer deployed by dev-env's install.sh
+# (deploy_dsh_statusbar) to ~/.dsh/profiles/<profile>/cordis.patch.yml when that
+# file is absent or the stock empty `[]`. It mounts the local ./statusbar.mjs
+# status contribution, rendering `host · model · ctx% · repo` above the prompt.
+#
+# The profile cordis.patch.yml is a top-level YAML array of loader patch entries
+# (applied after every bundle layer). If you hand-add other rows here, the
+# installer will detect them and leave this file alone (warn, don't clobber) —
+# add the status-bar row below to your own file to keep it deployed.
+- insert:
+    # The dev-env status bar. Entry-level `inject: [tuiStatus]` only orders the
+    # mount after the extensions row provides the seam; statusbar.mjs still
+    # soft-resolves it (ctx.get('tuiStatus', false)) so a skew/older host that
+    # lacks the row degrades to no status bar instead of a boot deadlock (the
+    # dsh-tui UI-service inject rule, issue #183).
+    - id: dev-status-bar
+      name: ./statusbar.mjs
+      inject: [tuiStatus]

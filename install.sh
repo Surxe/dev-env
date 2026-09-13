@@ -75,12 +75,14 @@ render_tree "$HERE/skills"   "$STAGE/skills"
 render_tree "$HERE/memory"   "$STAGE/memory"
 render_tree "$HERE/bashrc.d" "$STAGE/bashrc.d"
 [ -f "$HERE/statusline.py" ] && _render_file "$HERE/statusline.py" "$STAGE/statusline.py"
+[ -d "$HERE/dsh" ] && render_tree "$HERE/dsh" "$STAGE/dsh"
 
-deploy_skills     "$STAGE/skills"
-deploy_memory     "$STAGE/memory" "$PROJECT"
-deploy_bashrc     "$STAGE/bashrc.d"
+deploy_skills        "$STAGE/skills"
+deploy_memory        "$STAGE/memory" "$PROJECT"
+deploy_bashrc        "$STAGE/bashrc.d"
 deploy_gitconfig
-deploy_statusline "$STAGE/statusline.py"
+deploy_statusline    "$STAGE/statusline.py"
 deploy_dsh
+deploy_dsh_statusbar "$STAGE/dsh"
 
 echo "dev-env layer installed."

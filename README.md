@@ -29,6 +29,13 @@ before; `dev-env` owns only the shared slice.
   (DeepSeek Harness), exporting `DEEPSEEK_API_KEY` from `~/.config/deepseek/env`
   into every interactive dev shell at startup, + the mouse-release export.
 - `statusline.py` — the Claude status line (wired into `settings.json`).
+- `dsh/` — the DeepSeek Harness (dsh-tui) status bar: a status contribution
+  (`statusbar.mjs`) mounted through the profile's `cordis.patch.yml`, rendering a
+  single dim line `host · model · ctx% · repo` above the prompt — the dsh-tui
+  parity of `statusline.py` (dsh has no 5h/wk rate-limit windows, and its scalar
+  `ctx.tuiStatus.set` seam is monochrome, so those differ from the Claude bar).
+  Installed by `deploy_dsh_statusbar`; won't clobber a hand-edited
+  `cordis.patch.yml`.
 - `memory/` — universal memory notes + `MEMORY.shared.md` (the index fragment merged
   into each box's `MEMORY.md`). The same notes are also rendered into the
   `memory-standard` (mm) layout for the DeepSeek Harness at `~/.dsh/memory`.
