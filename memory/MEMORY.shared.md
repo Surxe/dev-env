@@ -4,4 +4,4 @@
 - [GitHub auth as dev](github-auth-as-dev.md) — gh is persistently authed as dev; call gh directly, no GH_TOKEN
 - [No emojis in files](no-emojis-in-files.md) — never use emojis/emoticons in written files; chat only
 - [Repos location](repos-location.md) — new git repos/projects go under /srv/dev/repos (root isn't writable by dev)
-- [Three box repos](box-repos.md) — dev-env = shared (both boxes); my-system = workstation; home-server = home server
+- [Box repos](box-repos.md) — four repos under /srv/dev/repos: dev-env = shared (both boxes); my-system = workstation; home-server = server host; valheim-server = the Valheim server on the server box
