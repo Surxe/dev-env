@@ -27,23 +27,44 @@ you add real decision-making here, revisit the pin.
 
 ## Cross-box sync
 
-Three repos under `/srv/dev/repos` are "box repos" that get deployed to one or
-both boxes:
+Several repos under `/srv/dev/repos` are "box repos" that get deployed to one or
+both boxes. Two kinds:
+
+**Config repos** — each has its own `install.sh`, so a sync pulls *and* installs
+(on the server only):
 
 | repo | deploys to |
 | --- | --- |
 | `dev-env` | both boxes (shared layer) |
 | `my-system` | workstation (`ethan-debian`) |
 | `home-server` | server (`home-server`) |
+| `valheim-server` | server (`home-server`) |
+
+**Project repos** — the WRF (War Robots Frontiers) data pipeline plus the Steam
+price tracker. Server-side services with data on `/srv/dev/wrf`, orchestrated by
+`home-server`'s `hs-*` / `wrf-orchestrator@` systemd units. They have no
+`install.sh` of their own, so a sync is **pull-only** — the units run the fresh
+code on their next tick:
+
+| repo | deploys to |
+| --- | --- |
+| `WRFrontiersDB-Data`, `-Orchestrator`, `-Parser`, `-Site` | server |
+| `WRFrontiers-Exporter`, `-News-Scraper`, `-Discount-Visualizer` | server |
+| `WRF-Compat-Tools` | server |
+| `steam-price-tracker` | server |
+
+(The cross-box `todo` store is not here: it syncs over its own bare repo, not a
+GitHub PR, so `/merged` never touches it.)
 
 When the merged repo is a box repo that also deploys to a box *other* than the
 one `/merged` is running on, the change must land there too: `sync-box.sh` (a
 sibling of this file, deployed alongside it) SSHes to the other box, pulls that
-repo's clone under `/srv/dev/repos`, and — **on the server only** — runs its
-`install.sh`. On `ethan-debian` the `install.sh` is never auto-run; it is left to
-Ethan and only reported. Non-box repos are skipped silently. The policy (repo →
-boxes → ssh host → install command) lives entirely in the script, so no judgment
-is needed here — just run it and read its `RESULT:`/`STOP:` line.
+repo's clone under `/srv/dev/repos`, and — **on the server, for repos that have
+an installer** — runs it. On `ethan-debian` the `install.sh` is never auto-run;
+it is left to Ethan and only reported. Non-box repos are skipped silently, and a
+repo that deploys only to the box you're on is a no-op. The policy (repo → boxes
+→ ssh host → install command) lives entirely in the script, so no judgment is
+needed here — just run it and read its `RESULT:`/`STOP:` line.
 
 ## Auth — same as `/pr`
 
