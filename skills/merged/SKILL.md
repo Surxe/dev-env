@@ -27,23 +27,15 @@ you add real decision-making here, revisit the pin.
 
 ## Cross-box sync
 
-Three repos under `/srv/dev/repos` are "box repos" that get deployed to one or
-both boxes:
+Some repos under `/srv/dev/repos` are "box repos": a merge to them must land on
+every box they deploy to. `sync-box.sh` (a sibling of this file) does that — it
+SSHes to each *other* box, pulls the repo, and on the server also runs its
+installer if it has one (workstation installs are left to Ethan). Repos that
+aren't box repos, or that deploy only to the box you're on, are a no-op.
 
-| repo | deploys to |
-| --- | --- |
-| `dev-env` | both boxes (shared layer) |
-| `my-system` | workstation (`ethan-debian`) |
-| `home-server` | server (`home-server`) |
-
-When the merged repo is a box repo that also deploys to a box *other* than the
-one `/merged` is running on, the change must land there too: `sync-box.sh` (a
-sibling of this file, deployed alongside it) SSHes to the other box, pulls that
-repo's clone under `/srv/dev/repos`, and — **on the server only** — runs its
-`install.sh`. On `ethan-debian` the `install.sh` is never auto-run; it is left to
-Ethan and only reported. Non-box repos are skipped silently. The policy (repo →
-boxes → ssh host → install command) lives entirely in the script, so no judgment
-is needed here — just run it and read its `RESULT:`/`STOP:` line.
+The full policy — which repos, which boxes, which install command — lives
+**entirely in the script**. Don't restate or second-guess it here: just run it
+(Step 3) and read its `RESULT:`/`STOP:` line.
 
 ## Auth — same as `/pr`
 

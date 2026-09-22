@@ -49,10 +49,24 @@ esac
 # --- policy tables ---
 repo_boxes() {   # repo name -> boxes it deploys to (space-separated)
   case "$1" in
-    dev-env)     echo "workstation server" ;;
-    my-system)   echo "workstation" ;;
-    home-server) echo "server" ;;
-    *)           echo "" ;;
+    # Config repos (each has its own install.sh).
+    dev-env)                          echo "workstation server" ;;
+    my-system)                        echo "workstation" ;;
+    home-server)                      echo "server" ;;
+    valheim-server)                   echo "server" ;;
+    # Project repos: server-side services (data on /srv/dev/wrf), orchestrated by
+    # home-server's hs-*/wrf-orchestrator@ systemd units. No install.sh of their own
+    # — the deploy is the git pull; the units run the fresh code on their next tick.
+    steam-price-tracker)              echo "server" ;;
+    WRFrontiersDB-Data)               echo "server" ;;
+    WRFrontiersDB-Orchestrator)       echo "server" ;;
+    WRFrontiersDB-Parser)             echo "server" ;;
+    WRFrontiersDB-Site)               echo "server" ;;
+    WRFrontiers-Exporter)             echo "server" ;;
+    WRFrontiers-News-Scraper)         echo "server" ;;
+    WRFrontiers-Discount-Visualizer)  echo "server" ;;
+    WRF-Compat-Tools)                 echo "server" ;;
+    *)                                echo "" ;;
   esac
 }
 box_host() {     # box -> ssh host that reaches it
@@ -61,12 +75,14 @@ box_host() {     # box -> ssh host that reaches it
     server)      echo "home-server" ;;
   esac
 }
-repo_install() { # repo name -> install command (server form; home-server needs root)
+repo_install() { # repo name -> install command (server form; host repos need root).
+                 # Empty = pull-only (project repos with no installer of their own).
   case "$1" in
-    dev-env)     echo "/srv/dev/repos/dev-env/install.sh" ;;
-    my-system)   echo "/srv/dev/repos/my-system/users/install.sh" ;;
-    home-server) echo "sudo -n /srv/dev/repos/home-server/install.sh" ;;
-    *)           echo "" ;;
+    dev-env)        echo "/srv/dev/repos/dev-env/install.sh" ;;
+    my-system)      echo "/srv/dev/repos/my-system/users/install.sh" ;;
+    home-server)    echo "sudo -n /srv/dev/repos/home-server/install.sh" ;;
+    valheim-server) echo "sudo -n /srv/dev/repos/valheim-server/install.sh" ;;
+    *)              echo "" ;;
   esac
 }
 
@@ -87,7 +103,9 @@ for box in $BOXES; do
 
   if [ "$DRY" = 1 ]; then
     echo "would: ssh $host '$pull'"
-    if [ "$box" = server ]; then
+    if [ -z "$inst" ]; then
+      echo "would: (no installer for $REPO) pull only"
+    elif [ "$box" = server ]; then
       echo "would: ssh $host '$inst'"
     else
       echo "would: (workstation) pull only; leave '$inst' to Ethan"
@@ -100,7 +118,10 @@ for box in $BOXES; do
     echo "      manual: ssh $host '$pull'" >&2
     exit 1
   fi
-  if [ "$box" = server ]; then
+  if [ -z "$inst" ]; then
+    # Project repo with no installer of its own: the pull is the deploy.
+    echo "synced $box: pulled $REPO (no install step)"
+  elif [ "$box" = server ]; then
     if ! ssh $SSH_OPTS "$host" "$inst"; then
       echo "STOP: pulled $REPO on $box but its install failed: $inst" >&2
       exit 1
