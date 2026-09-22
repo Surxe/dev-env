@@ -1,14 +1,15 @@
 # --- Coding-agent shortcuts (dev user).
-# `cc` launches Claude Code with permission prompts bypassed. To start a fresh
-# session, exit (Ctrl+D twice, or /exit) and run `cc` again — a new process gets
-# a genuinely fresh identity, which `/clear` doesn't (it keeps a --name/rename
-# and only drops the AI-generated title).
+# `cc` launches Claude Code with permission prompts bypassed. It passes --resume,
+# so with no session id it opens the interactive session picker to continue a
+# prior session; pass a session id (cc <id>) to resume that one directly. To
+# instead start a genuinely fresh session, run `claude --dangerously-skip-permissions`
+# without --resume.
 #
 # Resolved by devsh/dev-cc and the tmux split scaffold inside an interactive dev
 # shell (see users/ethan/.bashrc.d/10-devsh.sh and users/ethan/localbin/dev-cc):
 # a function loads in interactive dev shells the same way an alias would.
 cc() {
-    claude --dangerously-skip-permissions "$@"
+    claude --resume --dangerously-skip-permissions "$@"
 }
 
 # Export the DeepSeek API key into the shell environment at startup, so `dsh`,
