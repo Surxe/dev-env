@@ -32,8 +32,11 @@ repo copy also carries the verification/consent boundary; writing straight to li
 bypasses it. Same principle as [[no-symlink-repo-to-home]].
 
 **How to apply:** the moment you are about to create or edit ANY memory or skill —
-including in response to an explicit "add a memory" request — decide the layer first
-(shared vs box-local), write it in that repo, add its index line to the matching
+including in response to an explicit "add a memory" request — decide the layer first:
+if it should apply to **both** boxes it goes in `dev-env`, never duplicated into a
+machine repo (a shared item placed in `my-system`/`home-server` is the bug — it
+reaches only one box or drifts across copies); only genuinely box-local items go in
+that box's repo. Write it in that repo, add its index line to the matching
 `MEMORY.md` (the shared block for `dev-env` items; `{{MEMORY_REPO_DIR}}/MEMORY.md` for
 box-local ones), and do NOT touch the live copies. Do not auto-commit; ask Ethan, then
 remind him to deploy (`dev-env/install.sh` for shared, `{{INSTALL_CMD}}` for box-local).
