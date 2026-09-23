@@ -18,8 +18,9 @@
 #
 # SSH direction: workstation -> server works via the `home-server` alias in
 # ~/.ssh/config. server -> workstation ("ethan-debian") needs the server to have
-# its own SSH key + host resolution, which is not set up today — that direction
-# fails loudly with a STOP and Ethan pulls/installs there manually.
+# its own SSH key + host resolution, which is not set up today. So when running
+# ON the server, we do NOT try to SSH the workstation — we print a reminder that
+# Ethan must pull (and install) there himself, and finish without a STOP.
 set -euo pipefail
 
 REPO=""
@@ -94,12 +95,23 @@ fi
 
 SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10"
 did=0
+reminded=0
 for box in $BOXES; do
   [ "$box" = "$THIS" ] && continue
   did=1
   host="$(box_host "$box")"
   inst="$(repo_install "$REPO")"
   pull="git -C /srv/dev/repos/$REPO fetch --prune && git -C /srv/dev/repos/$REPO pull --ff-only"
+
+  # One-way SSH: the server can't reach the workstation. So when we're on the
+  # server and the other box is the workstation, don't attempt the pull — just
+  # remind Ethan to sync (and install) it there himself. Not a STOP.
+  if [ "$THIS" = server ] && [ "$box" = workstation ]; then
+    reminded=1
+    echo "reminder: sync $REPO on the workstation (ethan-debian) yourself — the server can't SSH to it."
+    echo "          run there: $pull${inst:+ && $inst}"
+    continue
+  fi
 
   if [ "$DRY" = 1 ]; then
     echo "would: ssh $host '$pull'"
@@ -134,6 +146,8 @@ done
 
 if [ "$did" = 0 ]; then
   echo "RESULT: no-sync ($REPO deploys only to this box: $THIS)"
+elif [ "$reminded" = 1 ]; then
+  echo "RESULT: cross-box sync for $REPO: workstation pull/install left to Ethan (server can't SSH to it)"
 else
   echo "RESULT: cross-box sync complete for $REPO"
 fi
