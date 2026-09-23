@@ -75,7 +75,7 @@ idempotent. Each machine repo calls it as one step of its own `install.sh`.
 
 `hosts/<name>.env` is the box's profile, sourced by the installer:
 
-- `PROJECT` — the Claude project dev's memories live under (`srv-dev` / `home-dev`).
+- `PROJECT` — the Claude project dev's memories live under (the box's cwd slug, e.g. `srv-dev`).
 - `EXCLUDE` — space-separated shared items this box opts out of (default: include all).
 - **Override vars** — values for *parameterized* shared items.
 
@@ -85,7 +85,7 @@ When a shared item would differ between boxes **only** in box-specific values
 engine renders placeholders before copying and **fails loudly on any unresolved
 `{{VAR}}`**, so a half-rendered file is never deployed. Example: the single
 `memory/edit-in-repo.md` renders to the my-system paths on the workstation and the
-`home-dev` paths on the server — replacing what used to be two near-duplicate notes.
+`home-server` paths on the server — replacing what used to be two near-duplicate notes.
 
 ## Engine
 

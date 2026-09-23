@@ -124,7 +124,8 @@ deploy_skills(){   # $1 = staged skills dir
 #     box-local entries are left intact). Claude consumes it via a symlinked
 #     project memory dir; the DeepSeek Harness gets the same notes rendered into
 #     the memory-standard layout under ~/.dsh/memory (see deploy_dsh_memory).
-#     The only per-box difference is $PROJECT (srv-dev vs home-dev). MEMORY.shared.md
+#     The only per-box difference is $PROJECT (the box's cwd slug; both boxes are
+#     currently srv-dev). MEMORY.shared.md
 #     (the index fragment) and MEMORY.md itself are never deployed as notes. ---
 _MEM_BEGIN="<!-- BEGIN dev-env shared memories (managed by dev-env/install.sh) -->"
 _MEM_END="<!-- END dev-env shared memories -->"
