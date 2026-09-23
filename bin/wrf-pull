@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+#
+# wrf-pull — fast-forward-pull every WRF* repo that sits on its default branch,
+# and loudly WARN about any that don't (so they're never silently skipped).
+#
+# A "WRF repo" is any git checkout under the repos dir whose directory name
+# starts with `WRF` (the WRFrontiers* / WRF-* family). For each one:
+#   - on its default branch  -> `git pull --ff-only`
+#   - on any other branch    -> skipped, and reported as an explicit WARNING
+#   - not a git repo / detached / no default resolvable -> reported, skipped
+#
+# The default branch is whatever origin/HEAD points at (main, master, ...),
+# resolved from the local ref first and from the remote as a fallback.
+#
+# Usage:  wrf-pull [REPOS_DIR]
+#   REPOS_DIR  where the repos live (default: $REPOS_DIR or /srv/dev/repos).
+#
+# Shared across both boxes via dev-env; installed to ~/.agents/bin (on PATH).
+set -uo pipefail
+
+REPOS_DIR="${1:-${REPOS_DIR:-/srv/dev/repos}}"
+
+# --- colours (only when stdout is a tty) ---
+if [ -t 1 ]; then
+    C_RED=$'\033[31m'; C_YEL=$'\033[33m'; C_GRN=$'\033[32m'
+    C_DIM=$'\033[2m'; C_BOLD=$'\033[1m'; C_OFF=$'\033[0m'
+else
+    C_RED=; C_YEL=; C_GRN=; C_DIM=; C_BOLD=; C_OFF=
+fi
+
+info(){  printf '%s\n' "$*"; }
+ok(){    printf '%s[ OK ]%s   %s\n' "$C_GRN" "$C_OFF" "$*"; }
+warn(){  printf '%s[WARN]%s   %s\n' "$C_YEL" "$C_OFF" "$*"; }
+err(){   printf '%s[FAIL]%s   %s\n' "$C_RED" "$C_OFF" "$*"; }
+
+# Resolve a repo's default branch (bare name, e.g. "main"): prefer the locally
+# recorded origin/HEAD, fall back to asking the remote, echo nothing on failure.
+default_branch(){
+    local ref
+    ref="$(git symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null)" \
+        && { printf '%s\n' "${ref#origin/}"; return 0; }
+    ref="$(git ls-remote --symref origin HEAD 2>/dev/null | awk '/^ref:/{print $2; exit}')" \
+        && [ -n "$ref" ] && { printf '%s\n' "${ref#refs/heads/}"; return 0; }
+    return 1
+}
+
+[ -d "$REPOS_DIR" ] || { err "repos dir not found: $REPOS_DIR"; exit 2; }
+
+info "${C_BOLD}wrf-pull${C_OFF} ${C_DIM}(repos: $REPOS_DIR)${C_OFF}"
+info ""
+
+pulled=0 uptodate=0 warned=0 failed=0
+warn_lines=()
+
+shopt -s nullglob
+for dir in "$REPOS_DIR"/WRF*/; do
+    name="$(basename "$dir")"
+
+    if ! git -C "$dir" rev-parse --git-dir >/dev/null 2>&1; then
+        warn "$name — not a git repository (skipped)"
+        warn_lines+=("$name: not a git repository")
+        warned=$((warned + 1))
+        continue
+    fi
+
+    cur="$(git -C "$dir" symbolic-ref -q --short HEAD 2>/dev/null || true)"
+    def="$(cd "$dir" && default_branch || true)"
+
+    if [ -z "$cur" ]; then
+        warn "$name — detached HEAD, not on any branch (skipped)"
+        warn_lines+=("$name: detached HEAD")
+        warned=$((warned + 1))
+        continue
+    fi
+
+    if [ -z "$def" ]; then
+        warn "$name — cannot resolve default branch (on '$cur', skipped)"
+        warn_lines+=("$name: default branch unresolved (on '$cur')")
+        warned=$((warned + 1))
+        continue
+    fi
+
+    if [ "$cur" != "$def" ]; then
+        warn "$name — on '${C_BOLD}$cur${C_OFF}', not default '${C_BOLD}$def${C_OFF}' (NOT pulled)"
+        warn_lines+=("$name: on '$cur', not default '$def'")
+        warned=$((warned + 1))
+        continue
+    fi
+
+    # On the default branch: fast-forward pull.
+    out="$(git -C "$dir" pull --ff-only 2>&1)"
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+        err "$name — pull failed on '$def':"
+        printf '%s\n' "$out" | sed 's/^/           /'
+        failed=$((failed + 1))
+        continue
+    fi
+
+    if printf '%s' "$out" | grep -q 'Already up to date'; then
+        ok "$name — up to date ($def)"
+        uptodate=$((uptodate + 1))
+    else
+        ok "$name — pulled ($def)"
+        printf '%s\n' "$out" | sed 's/^/           /'
+        pulled=$((pulled + 1))
+    fi
+done
+
+info ""
+info "${C_BOLD}summary${C_OFF}: ${C_GRN}$pulled pulled${C_OFF}, $uptodate up-to-date, ${C_YEL}$warned skipped/warned${C_OFF}, ${C_RED}$failed failed${C_OFF}"
+
+if [ "${#warn_lines[@]}" -gt 0 ]; then
+    info ""
+    warn "repos NOT on their default branch (or not pullable):"
+    for line in "${warn_lines[@]}"; do
+        printf '           %s- %s%s\n' "$C_YEL" "$line" "$C_OFF"
+    done
+fi
+
+# Non-zero exit if anything failed to pull, so callers/CI can notice.
+[ "$failed" -eq 0 ]

@@ -11,6 +11,13 @@ cc() {
     claude --dangerously-skip-permissions "$@"
 }
 
+# Put the shared dev bins (~/.agents/bin, deployed by dev-env) on PATH so scripts
+# like `wrf-pull` are runnable by name. Idempotent: skip if already present.
+case ":${PATH}:" in
+    *":$HOME/.agents/bin:"*) ;;
+    *) export PATH="$HOME/.agents/bin:$PATH" ;;
+esac
+
 # Export the DeepSeek API key into the shell environment at startup, so `dsh`,
 # `dsh-tui`, and any tool that reads DEEPSEEK_API_KEY from the environment work
 # without a wrapper. The key lives in ~/.config/deepseek/env (mode 0600,

@@ -27,7 +27,12 @@ before; `dev-env` owns only the shared slice.
   (native `user-agents` root) read.
 - `bashrc.d/10-agents.sh` — the `cc` launcher (Claude) + the `ds` launcher
   (DeepSeek Harness), exporting `DEEPSEEK_API_KEY` from `~/.config/deepseek/env`
-  into every interactive dev shell at startup, + the mouse-release export.
+  into every interactive dev shell at startup, + the mouse-release export. Also
+  puts `~/.agents/bin` on PATH.
+- `bin/` — shared dev bins, installed to `~/.agents/bin` (on PATH via the fragment
+  above) and runnable by name on both boxes. Currently `wrf-pull`: fast-forward-pulls
+  every `WRF*` repo under `/srv/dev/repos` that is on its default branch, and
+  explicitly WARNs about any that are on another branch (or aren't pullable).
 - `statusline.py` — the Claude status line (wired into `settings.json`).
 - `dsh/` — the DeepSeek Harness (dsh-tui) status bar: a status contribution
   (`statusbar.mjs`) mounted through the profile's `cordis.patch.yml`, rendering a

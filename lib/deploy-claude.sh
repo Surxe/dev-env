@@ -328,6 +328,23 @@ LOADER
     fi
 }
 
+# --- deploy_bin: copy staged shared bins into ~/.agents/bin (executable),
+#     honoring EXCLUDE. That dir is put on PATH for interactive dev shells by the
+#     10-agents.sh bashrc fragment, so the scripts are runnable by name on both
+#     boxes. Additive like the other deploys: refreshes/adds, does not prune. ---
+deploy_bin(){   # $1 = staged bin dir
+    local src="$1" dst="$AGENTS_DIR/bin" f name
+    [ -d "$src" ] || { say "bin: nothing to deploy"; return 0; }
+    mkdir -p "$dst"
+    for f in "$src"/*; do
+        [ -f "$f" ] || continue
+        name="$(basename "$f")"
+        _excluded "$name" && { say "bin: EXCLUDE $name"; continue; }
+        install -D -m 0755 "$f" "$dst/$name"
+        say "bin -> $dst/$name"
+    done
+}
+
 # --- deploy_gitconfig: dev's GLOBAL git author identity. Shared and constant
 #     across boxes (credit routes to Surxe via the +noreply author email, while
 #     the push still uses whichever PAT). Lifted from my-system dev-gitconfig.sh;
