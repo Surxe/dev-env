@@ -29,8 +29,13 @@ Ethan runs agents as `dev` on two boxes: the **workstation** (`ethan-debian`) an
   - Within skills, push deterministic steps into helper scripts rather than inline
     instructions.
   - If a suggested extraction isn't acted on right away, offer to log it with `todo add`.
+  - Welcomes proposals to refactor: when code or config you touch would be cleaner
+    restructured, propose the refactor (scope + why) rather than silently working around it.
 - **Working rules on every box:**
   - No secrets in repos — document only where they live. Don't touch SSH keys,
     passwords, or SMTP/API tokens.
   - Commit/push only when asked; branch off the default branch for changes.
   - New repos/projects go under `/srv/dev/repos`.
+  - To show Ethan an image (screenshot, chart, render), open it with the Read tool; the
+    image appears in the tool result in chat. `SendUserFile` doesn't reach him outside
+    project threads ("not delivered: not on a project thread").
