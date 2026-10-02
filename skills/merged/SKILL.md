@@ -28,14 +28,18 @@ you add real decision-making here, revisit the pin.
 ## Cross-box sync
 
 Some repos under `/srv/dev/repos` are "box repos": a merge to them must land on
-every box they deploy to. `sync-box.sh` (a sibling of this file) does that — it
-SSHes to each *other* box, pulls the repo, and on the server also runs its
-installer if it has one (workstation installs are left to Ethan). Repos that
-aren't box repos, or that deploy only to the box you're on, are a no-op.
+every box they deploy to. `sync-box.sh` (a sibling of this file) does that — on
+each *other* box it checks the clone is safe to deploy into (on its default
+branch, no tracked changes, no WRF pipeline run active for pipeline repos),
+pulls it, syncs its `.venv` from `requirements.txt` when it has one, and on the
+server runs its installer if it has one (workstation installs are left to
+Ethan). Repos that aren't box repos, or that deploy only to the box you're on,
+are a no-op.
 
 The full policy — which repos, which boxes, which install command — lives
-**entirely in the script**. Don't restate or second-guess it here: just run it
-(Step 3) and read its `RESULT:`/`STOP:` line.
+**entirely in the script**, and `merged.sh` runs it for every repo it cleans.
+**Never decide yourself whether a repo is a box repo or needs syncing**, and
+never report one as synced or skipped except by reading the script's output.
 
 ## Auth — same as `/pr`
 
@@ -70,70 +74,31 @@ If no todo id is in play, skip this step silently. (House rule
 requests to act — this skill is the explicit exception, because closing the
 initiating todo is part of what Ethan asked `/merged` to do.)
 
-## Step 2 — Run the cleanup script (one turn)
+## Step 2 — Run `merged.sh` (one turn)
 
-Everything else — branch detection, the already-clean short-circuit, the merge
-gate, and the actual cleanup — runs as a **single guarded script** so the whole
-cleanup is one tool turn rather than five. Do not break it back into separate
-`git`/`gh` calls; the point of the one-shot is to avoid re-billing the (large,
-end-of-session) context on every step.
+Cleanup and cross-box sync run as **one script call** covering every repo the
+user named, so the whole skill is a single tool turn and the sync cannot be
+skipped. Do not break it into separate `git`/`gh`/`sync-box.sh` calls.
 
 ```bash
-set -euo pipefail
-
-# Default branch: origin/HEAD leaf, falling back to gh.
-default=$(git symbolic-ref --quiet refs/remotes/origin/HEAD 2>/dev/null \
-  | sed 's#^refs/remotes/origin/##')
-[ -n "${default:-}" ] || default=$(gh repo view --json defaultBranchRef \
-  -q .defaultBranchRef.name)
-current=$(git branch --show-current)
-
-# Already-clean short-circuit: on default, nothing to delete.
-if [ "$current" = "$default" ]; then
-  git fetch --prune
-  git pull --ff-only
-  echo "RESULT: already on $default, nothing to clean"
-  exit 0
-fi
-
-# Merge gate — never delete unmerged local work.
-state=$(gh pr view "$current" --json state -q .state 2>/dev/null || echo NONE)
-if [ "$state" != "MERGED" ]; then
-  echo "STOP: PR for '$current' is '$state' (need MERGED). Not deleting."
-  exit 1
-fi
-
-# Clean up. -D (not -d): the merge is gated via GitHub above, and -d would
-# wrongly refuse after a squash merge (local commits aren't ancestors of
-# $default). --prune drops the remote ref GitHub auto-deleted on merge.
-git switch "$default"
-git fetch --prune
-git pull --ff-only
-git branch -D "$current"
-echo "RESULT: merged '$current' cleaned; now on $default, up to date"
+~/.agents/skills/merged/merged.sh /srv/dev/repos/<repo> [/srv/dev/repos/<repo2> ...]
 ```
 
-If the script prints a `STOP:` line (PR not merged, or no PR found for the
-branch), **halt and tell Ethan** — do not delete anything or improvise.
+Per repo it switches to the default branch, fetches/pulls, and deletes the
+feature branch only when GitHub reports its PR `MERGED` (`-D`, so squash merges
+work); a repo already on its default branch is just pulled. Then it **always**
+runs `sync-box.sh` for that repo — including the already-on-default case. Each
+repo prints its own `RESULT:`/`STOP:` lines, and the run ends with a `SUMMARY:`
+line; the exit code is non-zero if any repo hit a `STOP:`.
 
-## Step 3 — Sync the other box (one turn)
+On any `STOP:` line, **halt and tell Ethan** what it says — don't delete
+anything, retry, or improvise around it (e.g. a server clone on a feature branch
+or with local edits is reported, not fixed).
 
-After Step 2's script prints a `RESULT:` line (i.e. not `STOP:`), run the sync
-helper once, passing the repo directory that was just cleaned:
+## Step 3 — Report
 
-```bash
-~/.agents/skills/merged/sync-box.sh /srv/dev/repos/<repo>
-```
-
-It derives the current box from `hostname`, skips any repo that is not a box
-repo or that deploys only to this box, and otherwise pulls — and on the server
-also runs `install.sh` — on each other box. Read off its `RESULT:`/`STOP:` line.
-On `STOP:`, tell Ethan — the remote box was not fully synced; do not retry
-silently or improvise.
-
-## Step 4 — Report
-
-Briefly state what happened, reading off the scripts' `RESULT:`/`STOP:` lines:
+Briefly state what happened per repo, reading off `merged.sh`'s `RESULT:`/`STOP:`
+lines (quote the sync line as printed):
 todo closed (with id) if any, now on the default branch, feature branch deleted,
 tree up to date, and any cross-box sync done or skipped. If a `STOP:` appeared
 at any step, report it and halt. No emojis.
