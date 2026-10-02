@@ -23,6 +23,12 @@ Ethan runs agents as `dev` on two boxes: the **workstation** (`ethan-debian`) an
     only the note you need.
   - `~/.agents/skills/` — skills (symlinked to `~/.claude/skills/`), shared ones from
     `dev-env` plus the box's own.
+- **About Ethan:** a very technical developer who always prefers both code and config to be
+  checked in, and is always looking to further extract logic. Open to suggestions on
+  when to extract logic at a macro level, particularly into skills and memories.
+  - Within skills, push deterministic steps into helper scripts rather than inline
+    instructions.
+  - If a suggested extraction isn't acted on right away, offer to log it with `todo add`.
 - **Working rules on every box:**
   - No secrets in repos — document only where they live. Don't touch SSH keys,
     passwords, or SMTP/API tokens.
