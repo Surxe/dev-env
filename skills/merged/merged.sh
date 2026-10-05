@@ -6,7 +6,10 @@
 #   1. cleanup: switch to the default branch, fetch --prune, pull --ff-only, and
 #      delete the merged feature branch. A branch is only deleted when GitHub
 #      reports its PR MERGED; otherwise STOP for that repo (nothing deleted).
-#      Already on the default branch -> just fetch + pull.
+#      Already on the default branch -> just fetch + pull. Either way, then
+#      re-checkout the repo's vendored submodules (sync-box.sh --list-submodules)
+#      at the commits the pulled HEAD records, so a stale submodule checkout
+#      doesn't show up as a tracked change later.
 #   2. cross-box sync: ALWAYS run sync-box.sh (sibling of this file) after a
 #      successful cleanup, including the already-on-default case. Whether a repo
 #      is a box repo is decided only by sync-box.sh, never by the caller.
@@ -21,6 +24,22 @@ SYNC="$HERE/sync-box.sh"
 
 [ $# -gt 0 ] || set -- "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
+sync_submodules() { # run in the repo dir after a pull; prints "note:" lines, never fails
+  local p sd
+  for p in $("$SYNC" --list-submodules "$(pwd)"); do
+    sd="$p"
+    if [ -n "$(git -C "$sd" status --porcelain --untracked-files=no 2>/dev/null)" ]; then
+      echo "note: $p has uncommitted changes inside the submodule; left as is"
+    elif [ -e "$sd/.git" ] && [ -z "$(git -C "$sd" branch -r --contains HEAD 2>/dev/null)" ]; then
+      echo "note: $p is at $(git -C "$sd" rev-parse --short HEAD), on no remote branch (local submodule work?); left as is"
+    elif git submodule update --init -q -- "$p"; then
+      echo "note: $p at recorded commit $(git -C "$sd" rev-parse --short HEAD)"
+    else
+      echo "note: submodule update failed for $p"
+    fi
+  done
+}
+
 cleanup() { # run in the repo dir; prints RESULT:/STOP:, returns 1 on STOP
   local default current state
   default=$(git symbolic-ref --quiet refs/remotes/origin/HEAD 2>/dev/null \
@@ -33,6 +52,7 @@ cleanup() { # run in the repo dir; prints RESULT:/STOP:, returns 1 on STOP
   if [ "$current" = "$default" ]; then
     git fetch --prune -q && git pull --ff-only -q \
       || { echo "STOP: fetch/pull on $default failed"; return 1; }
+    sync_submodules
     echo "RESULT: already on $default, pulled; nothing to clean"
     return 0
   fi
@@ -48,6 +68,7 @@ cleanup() { # run in the repo dir; prints RESULT:/STOP:, returns 1 on STOP
   # refuse after a squash merge. --prune drops the auto-deleted remote ref.
   git switch -q "$default" && git fetch --prune -q && git pull --ff-only -q \
     || { echo "STOP: could not switch to / pull $default"; return 1; }
+  sync_submodules
   git branch -D "$current" >/dev/null || { echo "STOP: could not delete '$current'"; return 1; }
   echo "RESULT: merged '$current' cleaned; now on $default, up to date"
 }
