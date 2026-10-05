@@ -84,6 +84,8 @@ repo_boxes() {   # repo name -> boxes it deploys to (space-separated)
     WRFrontiers-News-Scraper)         echo "server" ;;
     WRFrontiers-Discount-Visualizer)  echo "server" ;;
     WRF-Compat-Tools)                 echo "server" ;;
+    # Runs as hs-wrf-discord-bot.service; its installer (home-server) is the deploy.
+    WRFrontiersDB-Discord-Bot)        echo "server" ;;
     *)                                echo "" ;;
   esac
 }
@@ -100,6 +102,9 @@ repo_install() { # repo name -> install command (server form; host repos need ro
     my-system)      echo "/srv/dev/repos/my-system/users/install.sh" ;;
     home-server)    echo "sudo -n /srv/dev/repos/home-server/install.sh" ;;
     valheim-server) echo "sudo -n /srv/dev/repos/valheim-server/install.sh" ;;
+    # Refreshes the editable venv (pyproject, so no requirements.txt sync) and
+    # restarts the bot; a pull alone leaves the running bot on the old code.
+    WRFrontiersDB-Discord-Bot) echo "sudo -n /srv/dev/repos/home-server/wrf-discord-bot/install.sh" ;;
     *)              echo "" ;;
   esac
 }
