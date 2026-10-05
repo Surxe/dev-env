@@ -8,7 +8,12 @@
 #   1. checks the clone is safe to deploy into: it exists, is on its DEFAULT
 #      branch (origin/HEAD), has no tracked changes, and (WRF pipeline repos) no
 #      wrf-orchestrator@ run is active. Any failure is a STOP: nothing is touched.
-#   2. fast-forwards the default branch (`pull --ff-only`).
+#      Submodules listed in repo_submodules are exempt from the tracked-changes
+#      check when only their POINTER drifted (the submodule's own worktree is
+#      clean and its checked-out commit is on a remote ref) — a stale submodule
+#      checkout, not local work.
+#   2. fast-forwards the default branch (`pull --ff-only`), then checks out the
+#      repo_submodules at the commits the new HEAD records.
 #   3. syncs the repo's Python venv when it has one (`.venv` + requirements.txt),
 #      since a new requirement otherwise silently degrades the service.
 #   4. on the SERVER runs the repo's install command, if it has one. On the
@@ -17,9 +22,12 @@
 # Usage:  sync-box.sh [<repo>] [--dry-run]
 #   <repo>     path or name of the merged repo (default: git toplevel of cwd).
 #   --dry-run  run the step-1 checks on each other box, print the plan; change nothing.
+#   --list-submodules  print the repo's repo_submodules paths and exit (merged.sh
+#              uses this to keep the same submodules current on THIS box).
 #
 # Data-driven: the case tables below (repo -> boxes, box -> ssh host,
-# repo -> install command, repo -> pipeline guard) are the whole policy. Prints
+# repo -> install command, repo -> pipeline guard, repo -> submodules) are the
+# whole policy. Prints
 # one RESULT:/STOP: line to read off. Exits non-zero only on STOP.
 #
 # SSH direction: workstation -> server works via the `home-server` alias in
@@ -31,9 +39,11 @@ set -euo pipefail
 
 REPO=""
 DRY=0
+LIST_SUBS=0
 for a in "$@"; do
   case "$a" in
     --dry-run) DRY=1 ;;
+    --list-submodules) LIST_SUBS=1 ;;
     *) REPO="$a" ;;
   esac
 done
@@ -100,18 +110,33 @@ repo_pipeline() { # repo name -> 1 if wrf-orchestrator@ runs its checkout (don't
   esac
 }
 
+repo_submodules() { # repo name -> submodule paths to keep at the recorded commit
+                    # (space-separated). Both vendor WRFrontiersDB-Design.
+  case "$1" in
+    WRFrontiersDB-Site)               echo "vendor/wrf-design" ;;
+    WRFrontiers-Discount-Visualizer)  echo "src/frontend/vendor/wrf-design" ;;
+    *)                                echo "" ;;
+  esac
+}
+
+if [ "$LIST_SUBS" = 1 ]; then
+  repo_submodules "$REPO"
+  exit 0
+fi
+
 BOXES="$(repo_boxes "$REPO")"
 if [ -z "$BOXES" ]; then
   echo "RESULT: no-sync ($REPO is not a box repo)"
   exit 0
 fi
 
-# Runs ON the target box (bash -s). Args: repo, mode (check|deploy), pipeline (0|1).
+# Runs ON the target box (bash -s). Args: repo, mode (check|deploy), pipeline (0|1),
+# submodules (space-separated paths, may be empty).
 # Prints "ok: ..." lines; on a failed check prints "STOP: ..." and exits 3.
 # shellcheck disable=SC2016
 REMOTE='
 set -uo pipefail
-repo="$1"; mode="$2"; pipeline="$3"
+repo="$1"; mode="$2"; pipeline="$3"; subs="${4:-}"
 d="/srv/dev/repos/$repo"
 stop() { echo "STOP: $*"; exit 3; }
 [ -d "$d/.git" ] || [ -f "$d/.git" ] || stop "$d is not a git clone on $(hostname)"
@@ -125,6 +150,17 @@ fi
 cur=$(git -C "$d" branch --show-current)
 [ "$cur" = "$def" ] || stop "$d is on \"${cur:-detached HEAD}\", not its default branch \"$def\"; the merge would not be deployed. Not touching it."
 dirty=$(git -C "$d" status --porcelain --untracked-files=no)
+drifted=""
+for p in $subs; do
+  echo "$dirty" | grep -qxF " M $p" || continue
+  sd="$d/$p"
+  [ -z "$(git -C "$sd" status --porcelain --untracked-files=no)" ] \
+    || stop "$sd has uncommitted tracked changes inside the submodule; not touching it"
+  [ -n "$(git -C "$sd" branch -r --contains HEAD 2>/dev/null)" ] \
+    || stop "$sd is checked out at $(git -C "$sd" rev-parse --short HEAD), which is on no remote branch (local submodule work?); not touching it"
+  dirty=$(echo "$dirty" | grep -vxF " M $p" || true)
+  drifted="$drifted $p"
+done
 [ -z "$dirty" ] || stop "$d has uncommitted tracked changes; not touching it: $(echo "$dirty" | head -3 | tr "\n" " ")"
 if [ "$pipeline" = 1 ]; then
   active=$(systemctl list-units "wrf-orchestrator@*" --state=activating,active --no-legend 2>/dev/null | awk "{print \$1}" | tr "\n" " ")
@@ -133,11 +169,16 @@ fi
 behind=$(git -C "$d" rev-list --count "HEAD..origin/$def")
 venv=0; [ -x "$d/.venv/bin/pip" ] && [ -f "$d/requirements.txt" ] && venv=1
 if [ "$mode" = check ]; then
-  echo "ok: $d on $def, clean, $behind commit(s) behind origin/$def$([ "$venv" = 1 ] && echo ", venv to sync")"
+  echo "ok: $d on $def, clean, $behind commit(s) behind origin/$def$([ "$venv" = 1 ] && echo ", venv to sync")${drifted:+, submodule pointer drift to reset:$drifted}"
   exit 0
 fi
 git -C "$d" pull --ff-only -q || stop "pull --ff-only failed in $d"
 echo "ok: pulled $d to $(git -C "$d" log -1 --format=%h) ($behind new commit(s))"
+if [ -n "$subs" ]; then
+  # shellcheck disable=SC2086
+  git -C "$d" submodule update --init -q -- $subs || stop "pulled $d but submodule update failed ($subs)"
+  echo "ok: submodules at recorded commits:$(for p in $subs; do printf " %s@%s" "$p" "$(git -C "$d/$p" rev-parse --short HEAD)"; done)"
+fi
 if [ "$venv" = 1 ]; then
   "$d/.venv/bin/pip" install -q -r "$d/requirements.txt" || stop "pulled $d but pip install -r requirements.txt failed"
   echo "ok: synced $d/.venv from requirements.txt"
@@ -153,6 +194,7 @@ for box in $BOXES; do
   host="$(box_host "$box")"
   inst="$(repo_install "$REPO")"
   pipe="$(repo_pipeline "$REPO")"
+  subs="$(repo_submodules "$REPO")"
   d="/srv/dev/repos/$REPO"
 
   # One-way SSH: the server can't reach the workstation. So when we're on the
@@ -167,7 +209,7 @@ for box in $BOXES; do
 
   mode=deploy; [ "$DRY" = 1 ] && mode=check
   set +e
-  out="$(ssh $SSH_OPTS "$host" bash -s -- "$REPO" "$mode" "$pipe" <<<"$REMOTE" 2>&1)"
+  out="$(ssh $SSH_OPTS "$host" bash -s -- "$REPO" "$mode" "$pipe" "$subs" <<<"$REMOTE" 2>&1)"
   rc=$?
   set -e
   [ -n "$out" ] && printf '%s\n' "$out" | sed "s/^/[$box] /"

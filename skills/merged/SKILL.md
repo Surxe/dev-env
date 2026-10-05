@@ -31,7 +31,9 @@ Some repos under `/srv/dev/repos` are "box repos": a merge to them must land on
 every box they deploy to. `sync-box.sh` (a sibling of this file) does that — on
 each *other* box it checks the clone is safe to deploy into (on its default
 branch, no tracked changes, no WRF pipeline run active for pipeline repos),
-pulls it, syncs its `.venv` from `requirements.txt` when it has one, and on the
+pulls it, re-checks out its vendored design submodule at the recorded commit
+(a submodule that is merely stale doesn't count as a tracked change), syncs its
+`.venv` from `requirements.txt` when it has one, and on the
 server runs its installer if it has one (workstation installs are left to
 Ethan). Repos that aren't box repos, or that deploy only to the box you're on,
 are a no-op.
