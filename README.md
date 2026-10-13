@@ -110,6 +110,13 @@ renders Claude-format memory notes into the `memory-standard` (mm) layout the
 DeepSeek Harness plugin reads. Set `DEVENV_HOME_OVERRIDE` to redirect all writes to
 a throwaway tree for testing.
 
+`lib/source-checkout.sh` is sourced by the machine repos' installers
+(`my-system/users/installers/common.sh`, `home-server/install.sh`) and answers one
+question: is this source repo on its default branch? An `install.sh` deploys whatever
+is checked out, which is how a change is tested before it merges, so those installers
+fetch/fast-forward a clone only when `on_default_branch` holds and deploy any other
+checkout (feature branch, detached HEAD) as-is.
+
 ## Prerequisites on a consuming box
 
 `pr`/`merged` depend on cross-repo tools that must be present for the skills to work:
