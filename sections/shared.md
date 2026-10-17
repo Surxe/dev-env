@@ -39,3 +39,5 @@ Ethan runs agents as `dev` on two boxes: the **workstation** (`ethan-debian`) an
   - To show Ethan an image (screenshot, chart, render), open it with the Read tool; the
     image appears in the tool result in chat. `SendUserFile` doesn't reach him outside
     project threads ("not delivered: not on a project thread").
+  - When pointing Ethan at a file, always give its full path as a `file:///` URL
+    (e.g. `file:///srv/dev/repos/my-system/README.md`) so it's clickable.
