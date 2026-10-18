@@ -34,6 +34,13 @@ before; `dev-env` owns only the shared slice.
   every `WRF*` repo under `/srv/dev/repos` that is on its default branch, and
   explicitly WARNs about any that are on another branch (or aren't pullable).
 - `statusline.py` — the Claude status line (wired into `settings.json`).
+- `hooks.json` — the **declared list of shared Claude Code hooks**, applied to
+  `settings.json` by `deploy_hooks` (`lib/claude-settings.py apply-hooks`): additive
+  and idempotent, a hook already wired with the exact command is left alone. Currently
+  the `SessionStart` hook that injects the live hostname (the `active-box` memory maps
+  it to the box). Adding a shared hook is an entry here, not a new deploy function.
+  Repos that own their own hooks declare them the same way in their own `hooks.json`
+  (e.g. claude-tts's `Stop` hook, applied by my-system's installer).
 - Session retention: `install.sh` sets `cleanupPeriodDays: 180` in `settings.json`
   (Claude Code's default is 30), so session transcripts are kept for 180 days before
   age-based cleanup removes them.
@@ -106,10 +113,11 @@ engine renders placeholders before copying and **fails loudly on any unresolved
 
 `lib/deploy-claude.sh` is the reusable, sourced engine (`render_tree`, `deploy_skills`,
 `deploy_memory`, `deploy_dsh_memory`, `deploy_dsh`, `deploy_bashrc`,
-`deploy_gitconfig`, `deploy_statusline`, plus the `_ensure_symlink` helper that
+`deploy_gitconfig`, `deploy_statusline`, `deploy_hooks`, plus the `_ensure_symlink` helper that
 wires `~/.claude` onto the neutral `~/.agents` root). It generalizes the dev-tier
-installers that lived in `my-system/users/installers/`. `lib/memory-standard.py`
-renders Claude-format memory notes into the `memory-standard` (mm) layout the
+installers that lived in `my-system/users/installers/`. `lib/claude-settings.py`
+is the merge-only `settings.json` editor every installer shares (`set`, `add-hook`,
+`apply-hooks`; `--selftest`). `lib/memory-standard.py` renders Claude-format memory notes into the `memory-standard` (mm) layout the
 DeepSeek Harness plugin reads. Set `DEVENV_HOME_OVERRIDE` to redirect all writes to
 a throwaway tree for testing.
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 #
 # install.sh — deploy the shared dev-env layer (portable skills, the cc/ds
-# launchers, dev's git identity, the statusline, and universal memories) into
-# dev's neutral `~/.agents` area on THIS box, then symlink the Claude-specific
-# paths into `~/.claude`. The DeepSeek Harness reads skills from ~/.agents/skills
+# launchers, dev's git identity, the statusline, declared Claude hooks, and
+# universal memories) into dev's neutral `~/.agents` area on THIS box, then
+# symlink the Claude-specific paths into `~/.claude`. The DeepSeek Harness reads skills from ~/.agents/skills
 # natively and memory through the `memory-standard` plugin (deploy_dsh). The
 # shared slice lives here once; each box gets it by running this script,
 # configured by its hosts/<name>.env profile.
@@ -76,6 +76,7 @@ render_tree "$HERE/memory"   "$STAGE/memory"
 render_tree "$HERE/bashrc.d" "$STAGE/bashrc.d"
 render_tree "$HERE/bin"      "$STAGE/bin"
 [ -f "$HERE/statusline.py" ] && _render_file "$HERE/statusline.py" "$STAGE/statusline.py"
+[ -f "$HERE/hooks.json" ]    && _render_file "$HERE/hooks.json"    "$STAGE/hooks.json"
 [ -d "$HERE/dsh" ] && render_tree "$HERE/dsh" "$STAGE/dsh"
 
 deploy_skills        "$STAGE/skills"
@@ -84,7 +85,7 @@ deploy_bashrc        "$STAGE/bashrc.d"
 deploy_bin           "$STAGE/bin"
 deploy_gitconfig
 deploy_statusline    "$STAGE/statusline.py"
-deploy_sessionstart_hostname
+deploy_hooks         "$STAGE/hooks.json"
 deploy_session_retention
 deploy_dsh
 deploy_dsh_statusbar "$STAGE/dsh"
