@@ -424,3 +424,26 @@ with open(path, "w", encoding="utf-8") as f:
 PY
     say "sessionstart: wired hostname hook -> $settings"
 }
+
+# --- deploy_session_retention: set settings.json's cleanupPeriodDays (merge-only,
+#     idempotent) so Claude Code keeps session transcripts for 180 days instead of
+#     the 30-day default. Cleanup is age-based, not count-based. ---
+deploy_session_retention(){
+    local settings="$CLAUDE_DIR/settings.json"
+    python3 - "$settings" <<'PY'
+import json, os, sys
+path = sys.argv[1]
+try:
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        data = {}
+except (OSError, ValueError):
+    data = {}
+data["cleanupPeriodDays"] = 180
+os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+with open(path, "w", encoding="utf-8") as f:
+    f.write(json.dumps(data, indent=2) + "\n")
+PY
+    say "session retention: cleanupPeriodDays=180 -> $settings"
+}

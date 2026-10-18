@@ -34,6 +34,9 @@ before; `dev-env` owns only the shared slice.
   every `WRF*` repo under `/srv/dev/repos` that is on its default branch, and
   explicitly WARNs about any that are on another branch (or aren't pullable).
 - `statusline.py` — the Claude status line (wired into `settings.json`).
+- Session retention: `install.sh` sets `cleanupPeriodDays: 180` in `settings.json`
+  (Claude Code's default is 30), so session transcripts are kept for 180 days before
+  age-based cleanup removes them.
 - `dsh/` — the DeepSeek Harness (dsh-tui) status bar: a status contribution
   (`statusbar.mjs`) mounted through the profile's `cordis.patch.yml`, rendering a
   single dim line `host · model · ctx% · repo` above the prompt — the dsh-tui
