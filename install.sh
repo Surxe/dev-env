@@ -85,6 +85,7 @@ deploy_bin           "$STAGE/bin"
 deploy_gitconfig
 deploy_statusline    "$STAGE/statusline.py"
 deploy_sessionstart_hostname
+deploy_session_retention
 deploy_dsh
 deploy_dsh_statusbar "$STAGE/dsh"
 
