@@ -11,9 +11,22 @@ write is atomic (temp file in the same dir + os.replace) and keeps the file mode
 
 Dependency-free (Python stdlib only).
 
+Hooks are normally DECLARED rather than added one by one: a repo that owns hooks
+keeps a hooks.json listing them and its installer runs `apply-hooks` on it. Format:
+
+    {"hooks": [
+        {"event": "SessionStart", "command": "...", "why": "free text, ignored"},
+        {"event": "PreToolUse", "matcher": "Bash", "command": "..."}
+    ]}
+
+`apply-hooks` is additive like `add-hook` (a hook already wired with that exact
+command is left alone; nothing is pruned), and validates the whole list before
+touching the file.
+
 Usage:
     claude-settings.py --file PATH set KEY JSON_VALUE
-    claude-settings.py --file PATH add-hook EVENT COMMAND
+    claude-settings.py --file PATH add-hook EVENT COMMAND [--matcher M]
+    claude-settings.py --file PATH apply-hooks HOOKS_JSON
     claude-settings.py --selftest
 """
 
@@ -60,8 +73,9 @@ def set_key(data, key, value):
     data[key] = value
 
 
-def add_hook(data, event, cmd):
-    """Append a command hook to EVENT unless that exact command is already wired."""
+def add_hook(data, event, cmd, matcher=None):
+    """Append a command hook to EVENT unless that exact command is already wired
+    (under any matcher). MATCHER, when given, scopes the new group (tool events)."""
     groups = data.setdefault("hooks", {}).setdefault(event, [])
     present = any(
         isinstance(g, dict) and any(
@@ -70,7 +84,37 @@ def add_hook(data, event, cmd):
         for g in groups
     )
     if not present:
-        groups.append({"hooks": [{"type": "command", "command": cmd}]})
+        group = {"hooks": [{"type": "command", "command": cmd}]}
+        if matcher is not None:
+            group = {"matcher": matcher, **group}
+        groups.append(group)
+
+
+def load_hook_list(path):
+    """Parse and validate a declared hooks.json; exit (file untouched) on any error."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            decl = json.load(f)
+    except (OSError, ValueError) as e:
+        sys.exit("claude-settings: cannot read hook list %s (%s)" % (path, e))
+    hooks = decl.get("hooks") if isinstance(decl, dict) else None
+    if not isinstance(hooks, list):
+        sys.exit("claude-settings: %s must be an object with a \"hooks\" list" % path)
+    for i, h in enumerate(hooks):
+        ok = (isinstance(h, dict)
+              and isinstance(h.get("event"), str) and h["event"]
+              and isinstance(h.get("command"), str) and h["command"]
+              and isinstance(h.get("matcher", ""), str)
+              and set(h) <= {"event", "command", "matcher", "why"})
+        if not ok:
+            sys.exit("claude-settings: %s hooks[%d] needs string event+command "
+                     "(optional matcher, why; no other keys)" % (path, i))
+    return hooks
+
+
+def apply_hooks(data, hooks):
+    for h in hooks:
+        add_hook(data, h["event"], h["command"], h.get("matcher"))
 
 
 def selftest():
@@ -92,6 +136,30 @@ def selftest():
         set_key(data, "statusLine", {"type": "command"})
         save(p, data)
         assert load(p)["model"] == "keep"
+        # a declared list applies idempotently, with matchers, alongside add-hook
+        lst = os.path.join(d, "hooks.json")
+        with open(lst, "w") as f:
+            json.dump({"hooks": [
+                {"event": "Stop", "command": "x hook", "why": "already wired"},
+                {"event": "PreToolUse", "matcher": "Bash", "command": "y hook"},
+            ]}, f)
+        for _ in range(2):
+            data = load(p)
+            apply_hooks(data, load_hook_list(lst))
+            save(p, data)
+        data = load(p)
+        assert len(data["hooks"]["Stop"]) == 1
+        assert data["hooks"]["PreToolUse"] == [
+            {"matcher": "Bash", "hooks": [{"type": "command", "command": "y hook"}]}]
+        # a malformed list is refused before the settings file is touched
+        with open(lst, "w") as f:
+            json.dump({"hooks": [{"event": "Stop"}]}, f)
+        try:
+            load_hook_list(lst)
+        except SystemExit:
+            pass
+        else:
+            raise AssertionError("malformed hook list was accepted")
         # a broken file is refused and left as-is
         with open(p, "w") as f:
             f.write("{bad")
@@ -117,12 +185,16 @@ def main():
     h = sub.add_parser("add-hook")
     h.add_argument("event")
     h.add_argument("command")
+    h.add_argument("--matcher")
+    a = sub.add_parser("apply-hooks")
+    a.add_argument("hooks_json", help="a declared hook list (see module docstring)")
     args = ap.parse_args()
 
     if args.selftest:
         return selftest()
     if not args.file or not args.op:
         ap.error("--file and an operation are required")
+    hooks = load_hook_list(args.hooks_json) if args.op == "apply-hooks" else None
     data = load(args.file)
     if args.op == "set":
         try:
@@ -130,8 +202,10 @@ def main():
         except ValueError as e:
             ap.error("value is not valid JSON: %s" % e)
         set_key(data, args.key, value)
+    elif args.op == "add-hook":
+        add_hook(data, args.event, args.command, args.matcher)
     else:
-        add_hook(data, args.event, args.command)
+        apply_hooks(data, hooks)
     save(args.file, data)
 
 

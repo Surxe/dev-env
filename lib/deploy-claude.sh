@@ -358,7 +358,7 @@ deploy_gitconfig(){
 }
 
 # --- _claude_settings: merge-only, idempotent edit of dev's ~/.claude/settings.json
-#     via lib/claude-settings.py (set KEY JSON | add-hook EVENT CMD). The helper
+#     via lib/claude-settings.py (set KEY JSON | add-hook EVENT CMD | apply-hooks LIST). The helper
 #     refuses a settings.json that does not parse rather than overwriting it, so a
 #     failure here warns and leaves the file alone instead of failing the deploy. ---
 _claude_settings(){
@@ -387,17 +387,19 @@ deploy_statusline(){   # $1 = staged statusline.py
     fi
 }
 
-# --- deploy_sessionstart_hostname: wire a SessionStart hook into settings.json
-#     (merge-only, idempotent) that injects the live hostname into context at the
-#     start of every session, so the model detects the active box directly instead
-#     of inferring it. Shared -> runs on both boxes; each resolves its own hostname
-#     at session start. The active-box memory maps the hostname to the box name. ---
-deploy_sessionstart_hostname(){
-    local cmd='printf '\''{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"Active hostname: %s"}}\n'\'' "$(hostname)"'
-    if _claude_settings add-hook SessionStart "$cmd"; then
-        say "sessionstart: wired hostname hook -> $CLAUDE_DIR/settings.json"
+# --- deploy_hooks: apply a declared hook list (hooks.json) to settings.json via
+#     claude-settings.py apply-hooks — merge-only and idempotent; a hook whose exact
+#     command is already wired is left alone, and nothing is pruned. Each hook-owning
+#     repo declares its own list (dev-env's shared hooks.json here; e.g. claude-tts's
+#     Stop hook, applied by my-system), so adding a hook is a data edit, not a new
+#     deploy function. ---
+deploy_hooks(){   # $1 = staged hooks.json
+    local src="$1"
+    [ -e "$src" ] || { say "hooks: no hook list — skipping"; return 0; }
+    if _claude_settings apply-hooks "$src"; then
+        say "hooks: applied $(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["hooks"]))' "$src") declared hook(s) -> $CLAUDE_DIR/settings.json"
     else
-        say "!! sessionstart: settings.json not updated (see above)"
+        say "!! hooks: settings.json not updated (see above)"
     fi
 }
 

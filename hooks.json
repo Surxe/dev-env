@@ -1,0 +1,9 @@
+{
+  "hooks": [
+    {
+      "event": "SessionStart",
+      "why": "Inject the live hostname at session start so the model detects the active box directly; the active-box memory maps it to the box name.",
+      "command": "printf '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Active hostname: %s\"}}\\n' \"$(hostname)\""
+    }
+  ]
+}
