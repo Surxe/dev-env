@@ -357,32 +357,29 @@ deploy_gitconfig(){
     say "git identity -> $DEV_GIT_NAME <$DEV_GIT_EMAIL>"
 }
 
+# --- _claude_settings: merge-only, idempotent edit of dev's ~/.claude/settings.json
+#     via lib/claude-settings.py (set KEY JSON | add-hook EVENT CMD). The helper
+#     refuses a settings.json that does not parse rather than overwriting it, so a
+#     failure here warns and leaves the file alone instead of failing the deploy. ---
+_claude_settings(){
+    python3 "$LIB_DIR/claude-settings.py" --file "$CLAUDE_DIR/settings.json" "$@"
+}
+
 # --- deploy_statusline: copy statusline.py into ~/.agents, symlink it into
 #     ~/.claude, and idempotently wire settings.json's statusLine key without
 #     disturbing other keys. Lifted from dev-statusline.sh; warns (not fails) if
 #     the self-test does not pass. ---
 deploy_statusline(){   # $1 = staged statusline.py
-    local src="$1" dst="$AGENTS_DIR/statusline.py" settings="$CLAUDE_DIR/settings.json"
+    local src="$1" dst="$AGENTS_DIR/statusline.py"
     [ -e "$src" ] || { say "statusline: no source — skipping"; return 0; }
     install -D -m 0644 "$src" "$dst"
     say "statusline -> $dst"
     _ensure_symlink "$dst" "$CLAUDE_DIR/statusline.py"
-    python3 - "$settings" <<'PY'
-import json, os, sys
-path = sys.argv[1]
-try:
-    with open(path, encoding="utf-8") as f:
-        data = json.load(f)
-    if not isinstance(data, dict):
-        data = {}
-except (OSError, ValueError):
-    data = {}
-data["statusLine"] = {"type": "command", "command": "python3 ~/.claude/statusline.py"}
-os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-with open(path, "w", encoding="utf-8") as f:
-    f.write(json.dumps(data, indent=2) + "\n")
-PY
-    say "statusline: wired -> $settings"
+    if _claude_settings set statusLine '{"type": "command", "command": "python3 ~/.claude/statusline.py"}'; then
+        say "statusline: wired -> $CLAUDE_DIR/settings.json"
+    else
+        say "!! statusline: settings.json not updated (see above)"
+    fi
     if python3 "$dst" --selftest >/dev/null 2>&1; then
         say "statusline: self-test passed"
     else
@@ -396,54 +393,21 @@ PY
 #     of inferring it. Shared -> runs on both boxes; each resolves its own hostname
 #     at session start. The active-box memory maps the hostname to the box name. ---
 deploy_sessionstart_hostname(){
-    local settings="$CLAUDE_DIR/settings.json"
-    python3 - "$settings" <<'PY'
-import json, os, sys
-path = sys.argv[1]
-try:
-    with open(path, encoding="utf-8") as f:
-        data = json.load(f)
-    if not isinstance(data, dict):
-        data = {}
-except (OSError, ValueError):
-    data = {}
-cmd = ('printf \'{"hookSpecificOutput":{"hookEventName":"SessionStart",'
-       '"additionalContext":"Active hostname: %s"}}\\n\' "$(hostname)"')
-ss = data.setdefault("hooks", {}).setdefault("SessionStart", [])
-present = any(
-    isinstance(g, dict) and any(
-        isinstance(h, dict) and h.get("command") == cmd for h in g.get("hooks", [])
-    )
-    for g in ss
-)
-if not present:
-    ss.append({"hooks": [{"type": "command", "command": cmd}]})
-os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-with open(path, "w", encoding="utf-8") as f:
-    f.write(json.dumps(data, indent=2) + "\n")
-PY
-    say "sessionstart: wired hostname hook -> $settings"
+    local cmd='printf '\''{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"Active hostname: %s"}}\n'\'' "$(hostname)"'
+    if _claude_settings add-hook SessionStart "$cmd"; then
+        say "sessionstart: wired hostname hook -> $CLAUDE_DIR/settings.json"
+    else
+        say "!! sessionstart: settings.json not updated (see above)"
+    fi
 }
 
 # --- deploy_session_retention: set settings.json's cleanupPeriodDays (merge-only,
 #     idempotent) so Claude Code keeps session transcripts for 180 days instead of
 #     the 30-day default. Cleanup is age-based, not count-based. ---
 deploy_session_retention(){
-    local settings="$CLAUDE_DIR/settings.json"
-    python3 - "$settings" <<'PY'
-import json, os, sys
-path = sys.argv[1]
-try:
-    with open(path, encoding="utf-8") as f:
-        data = json.load(f)
-    if not isinstance(data, dict):
-        data = {}
-except (OSError, ValueError):
-    data = {}
-data["cleanupPeriodDays"] = 180
-os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-with open(path, "w", encoding="utf-8") as f:
-    f.write(json.dumps(data, indent=2) + "\n")
-PY
-    say "session retention: cleanupPeriodDays=180 -> $settings"
+    if _claude_settings set cleanupPeriodDays 180; then
+        say "session retention: cleanupPeriodDays=180 -> $CLAUDE_DIR/settings.json"
+    else
+        say "!! session retention: settings.json not updated (see above)"
+    fi
 }
