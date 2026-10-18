@@ -44,13 +44,18 @@ ds() {
     dsh --profile "${DSH_PROFILE:-dsh-tui}" "$@"
 }
 
-# Fully release Claude Code's TUI mouse capture. Its mouse tracking (v2.1.195+)
-# intermittently desyncs from the terminal, leaving the UI unclickable /
-# interactions silently dropped, and also causes accidental prompt approvals.
-# The milder CLAUDE_CODE_DISABLE_MOUSE_CLICKS keeps the scroll wheel but leaves
-# mouse reporting on, which still swallows click-drag so native text selection /
-# copy stays broken. CLAUDE_CODE_DISABLE_MOUSE=1 releases the mouse entirely:
-# click-drag selection + terminal copy work with no modifier. Trade-off is no
-# scroll wheel (scroll with PageUp / Ctrl); prompts are answered with arrow keys
-# + Enter. (todo t-0051)
-export CLAUDE_CODE_DISABLE_MOUSE=1
+# Claude Code's TUI mouse capture is left ON (trial, todo t-0212). The fullscreen
+# renderer draws on the alternate screen, so with the mouse released (below) the
+# wheel had nothing to scroll -- tmux history is empty -- and PageUp didn't work
+# mid-copy because the drag put tmux in copy mode. With capture on, Claude Code
+# handles wheel scroll, in-app selection (copied on release via wl-copy), and
+# Ctrl+click on links, including links wrapped across rows. Shift+drag still
+# gives a native terminal selection; Ctrl+o then [ dumps the conversation into
+# native scrollback for search/copy.
+#
+# Previously (todo t-0051) capture was fully released because its mouse
+# tracking (v2.1.195+) intermittently desynced from the terminal, leaving the UI
+# unclickable, and caused accidental prompt approvals. If that recurs, restore
+# the line below; CLAUDE_CODE_DISABLE_MOUSE_CLICKS=1 is the middle ground (wheel
+# only, no clicks).
+# export CLAUDE_CODE_DISABLE_MOUSE=1
